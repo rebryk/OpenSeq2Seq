@@ -54,7 +54,7 @@ class TacotronLoss(Loss):
 
               * spec: the true spectrogram of shape [batch, time, feats]
               * stop_token: the stop_token of shape [batch, time]
-
+              * spec_length: the length of spectrograms [batch]
             ]
 
     Returns:

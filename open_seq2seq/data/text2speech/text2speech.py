@@ -113,6 +113,8 @@ class Text2SpeechDataLayer(DataLayer):
         worker_id
     )
 
+    self._cache = {}
+
     names = ['wav_filename', 'raw_transcript', 'transcript']
     sep = '\x7c'
     header = None
@@ -427,19 +429,24 @@ class Text2SpeechDataLayer(DataLayer):
     else:
       features_type = self.params['output_type']
 
-    spectrogram = get_speech_features_from_file(
-        file_path,
-        self.params['num_audio_features'],
-        features_type=features_type,
-        n_fft=self._n_fft,
-        mag_power=self.params.get('mag_power', 2),
-        feature_normalize=self.params["feature_normalize"],
-        mean=self.params.get("feature_normalize_mean", 0.),
-        std=self.params.get("feature_normalize_std", 1.),
-        trim=self.params.get("trim", False),
-        data_min=self.params.get("data_min", 1e-5),
-        mel_basis=self._mel_basis
-    )
+    if audio_filename in self._cache:
+      spectrogram = self._cache[audio_filename]
+    else:
+      spectrogram = get_speech_features_from_file(
+          file_path,
+          self.params['num_audio_features'],
+          features_type=features_type,
+          n_fft=self._n_fft,
+          mag_power=self.params.get('mag_power', 2),
+          feature_normalize=self.params["feature_normalize"],
+          mean=self.params.get("feature_normalize_mean", 0.),
+          std=self.params.get("feature_normalize_std", 1.),
+          trim=self.params.get("trim", False),
+          data_min=self.params.get("data_min", 1e-5),
+          mel_basis=self._mel_basis
+      )
+
+      self._cache[audio_filename] = spectrogram
 
     if self._both:
       mel_spectrogram, spectrogram = spectrogram
