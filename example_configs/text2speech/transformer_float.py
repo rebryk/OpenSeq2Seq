@@ -56,11 +56,11 @@ num_layers = 6
 
 base_params = {
   "random_seed": 0,
-  "use_horovod": False,
+  "use_horovod": True,
   "max_steps": 100000,
   "bench_start": 0,
 
-  "num_gpus": 1,
+  "num_gpus": 8,
   "batch_size_per_gpu": batch_size,
 
   "save_summaries_steps": 50,
