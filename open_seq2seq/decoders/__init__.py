@@ -8,7 +8,7 @@ from .fc_decoders import FullyConnectedCTCDecoder, FullyConnectedDecoder, FullyC
 from .rnn_decoders import RNNDecoderWithAttention, \
     BeamSearchRNNDecoderWithAttention
 from .transformer_decoder import TransformerDecoder
-from .transformer_tss_decoder import TransformerTTSDecoder
+from .transformer_tts_decoder import TransformerTTSDecoder
 from .convs2s_decoder import ConvS2SDecoder
 from .lm_decoders import FakeDecoder
 from .tacotron2_decoder import Tacotron2Decoder

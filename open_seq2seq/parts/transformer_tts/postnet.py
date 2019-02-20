@@ -25,11 +25,11 @@ class Postnet:
     top_layer = decoder_output
 
     for i, conv_params in enumerate(self.conv_layers):
-      ch_out = conv_params['num_channels']
-      kernel_size = conv_params['kernel_size']
-      strides = conv_params['stride']
-      padding = conv_params['padding']
-      activation_fn = conv_params['activation_fn']
+      ch_out = conv_params["num_channels"]
+      kernel_size = conv_params["kernel_size"]
+      strides = conv_params["stride"]
+      padding = conv_params["padding"]
+      activation_fn = conv_params["activation_fn"]
 
       if ch_out == -1:
           ch_out = self.num_audio_features
@@ -74,11 +74,11 @@ class MagSpecPostnet:
       activation_fn=tf.nn.relu,
       strides=1,
       padding="SAME",
-      regularizer=self.params.get('regularizer', None),
+      regularizer=self.params.get("regularizer", None),
       training=self.training,
-      data_format=self.params.get('postnet_data_format', 'channels_last'),
-      bn_momentum=self.params.get('postnet_bn_momentum', 0.1),
-      bn_epsilon=self.params.get('postnet_bn_epsilon', 1e-5),
+      data_format=self.params.get("postnet_data_format", "channels_last"),
+      bn_momentum=self.params.get("postnet_bn_momentum", 0.1),
+      bn_epsilon=self.params.get("postnet_bn_epsilon", 1e-5),
     )
 
     mag_spec_prediction = conv_bn_actv(
@@ -90,11 +90,11 @@ class MagSpecPostnet:
       activation_fn=tf.nn.relu,
       strides=1,
       padding="SAME",
-      regularizer=self.params.get('regularizer', None),
+      regularizer=self.params.get("regularizer", None),
       training=self.training,
-      data_format=self.params.get('postnet_data_format', 'channels_last'),
-      bn_momentum=self.params.get('postnet_bn_momentum', 0.1),
-      bn_epsilon=self.params.get('postnet_bn_epsilon', 1e-5),
+      data_format=self.params.get("postnet_data_format", "channels_last"),
+      bn_momentum=self.params.get("postnet_bn_momentum", 0.1),
+      bn_epsilon=self.params.get("postnet_bn_epsilon", 1e-5),
     )
 
     if self.exp_mag:

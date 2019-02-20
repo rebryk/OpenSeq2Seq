@@ -57,7 +57,7 @@ num_layers = 6
 base_params = {
   "random_seed": 0,
   "use_horovod": True,
-  "max_steps": 100000,
+  "max_steps": 1000000,
   "bench_start": 0,
 
   "num_gpus": 8,
@@ -86,12 +86,12 @@ base_params = {
   "dtype": tf.float32,
   "regularizer": tf.contrib.layers.l2_regularizer,
   "regularizer_params": {
-    'scale': 1e-6
+    "scale": 1e-6
   },
   "initializer": tf.contrib.layers.xavier_initializer,
 
-  "summaries": ['learning_rate', 'variables', 'gradients', 'larc_summaries',
-                'variable_norm', 'gradient_norm', 'global_gradient_norm'],
+  "summaries": ["learning_rate", "variables", "gradients", "larc_summaries",
+                "variable_norm", "gradient_norm", "global_gradient_norm"],
 
   "encoder": TransformerTTSEncoder,
   "encoder_params": {
@@ -127,11 +127,11 @@ base_params = {
 
   "decoder": TransformerTTSDecoder,
   "decoder_params": {
-    'enable_prenet': True,
-    'prenet_layers': 2,
-    'prenet_units': 512,
+    "enable_prenet": True,
+    "prenet_layers": 2,
+    "prenet_units": 512,
 
-    'enable_postnet': True,
+    "enable_postnet": True,
     "postnet_keep_dropout_prob": 0.5,
     "postnet_data_format": "channels_last",
     "postnet_conv_layers": [
@@ -182,14 +182,14 @@ base_params = {
     "num_audio_features": num_audio_features,
     "output_type": output_type,
     "vocab_file": "open_seq2seq/test_utils/vocab_tts.txt",
-    'dataset_location': dataset_location,
+    "dataset_location": dataset_location,
     "mag_power": 1,
     "pad_EOS": True,
     "feature_normalize": False,
     "feature_normalize_mean": 0.,
     "feature_normalize_std": 1.,
     "data_min": data_min,
-    "mel_type": 'htk',
+    "mel_type": "htk",
     "trim": trim,   
     "duration_max": 1024,
     "duration_min": 24,
@@ -211,8 +211,8 @@ eval_params = {
     "dataset_files": [
       os.path.join(dataset_location, val),
     ],
-    "duration_max":10000,
-    "duration_min":0,
+    "duration_max": 10000,
+    "duration_min": 0,
     "shuffle": False,
   },
 }
@@ -222,8 +222,8 @@ infer_params = {
     "dataset_files": [
       os.path.join(dataset_location, "test.csv"),
     ],
-    "duration_max":10000,
-    "duration_min":0,
+    "duration_max": 10000,
+    "duration_min": 0,
     "shuffle": False,
   },
 }
@@ -231,8 +231,8 @@ infer_params = {
 interactive_infer_params = {
   "data_layer_params": {
     "dataset_files": [],
-    "duration_max":10000,
-    "duration_min":0,
+    "duration_max": 10000,
+    "duration_min": 0,
     "shuffle": False,
   },
 }

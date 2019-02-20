@@ -29,12 +29,7 @@ class TransformerTTSDecoder(Decoder):
       "num_heads": int,
       "attention_dropout": float,
       "relu_dropout": float,
-      "filter_size": int,
-      # "batch_size": int,
-      # "tgt_vocab_size": int,
-      # "beam_size": int,
-      # "alpha": float,
-      # "extra_decode_length": int,
+      "filter_size": int
     })
 
   @staticmethod
@@ -73,9 +68,9 @@ class TransformerTTSDecoder(Decoder):
     self.model = model
     self._mode = mode
     self.training = (mode == "train")
-    self.n_feats = self.model.get_data_layer().params['num_audio_features']
+    self.n_feats = self.model.get_data_layer().params["num_audio_features"]
 
-    if "both" in self.model.get_data_layer().params['output_type']:
+    if "both" in self.model.get_data_layer().params["output_type"]:
       self.both = True
       if not self.params.get("enable_postnet", True):
         raise ValueError("postnet must be enabled for both mode")
@@ -85,7 +80,7 @@ class TransformerTTSDecoder(Decoder):
     if not self.params.get("enable_postnet", True):
       raise ValueError("You should use pre-net!")
 
-    if self.params.get('enable_postnet', True):
+    if self.params.get("enable_postnet", True):
       if "postnet_conv_layers" not in self.params:
         raise ValueError("postnet_conv_layers must be passed from config file if postnet is enabled")
 
@@ -94,7 +89,7 @@ class TransformerTTSDecoder(Decoder):
 
     self.features_count = sum(self.n_feats.values()) if self.both else self.n_feats
 
-    self.regularizer = self.params.get('regularizer', None)
+    self.regularizer = self.params.get("regularizer", None)
 
     self.prenet = None
     self.decoder = None
@@ -112,12 +107,12 @@ class TransformerTTSDecoder(Decoder):
     for weights in vars_to_regularize:
       if "bias" not in weights.name:
         if weights.dtype.base_dtype == tf.float16:
-          tf.add_to_collection('REGULARIZATION_FUNCTIONS', (weights, self.regularizer))
+          tf.add_to_collection("REGULARIZATION_FUNCTIONS", (weights, self.regularizer))
         else:
           tf.add_to_collection(ops.GraphKeys.REGULARIZATION_LOSSES, self.regularizer(weights))
 
-    # TODO: why do we add regularization for pre-net and don't do it for post-net?
-    if self.params.get('enable_prenet', True):
+    # TODO: why do we add regularization for pre-net and don"t do it for post-net?
+    if self.params.get("enable_prenet", True):
       self.prenet.add_regularization(self.regularizer)
 
   def decode_pass(self, decoder_inputs, encoder_outputs, encoder_decoder_attention_bias, sequence_lengths=None):
@@ -151,7 +146,7 @@ class TransformerTTSDecoder(Decoder):
     else:
       mag_spec_prediction = tf.zeros([batch_size, batch_size, batch_size])
 
-    # it's just a stub
+    # it"s just a stub
     alignments = tf.zeros([batch_size, batch_size, batch_size])
 
     if sequence_lengths is None:
@@ -175,17 +170,17 @@ class TransformerTTSDecoder(Decoder):
     inputs_attention_bias = input_dict["encoder_output"]["inputs_attention_bias"]
 
     if self.training:
-      spec = input_dict['target_tensors'][0] if 'target_tensors' in input_dict else None
-      spec_length = input_dict['target_tensors'][2] if 'target_tensors' in input_dict else None
+      spec = input_dict["target_tensors"][0] if "target_tensors" in input_dict else None
+      spec_length = input_dict["target_tensors"][2] if "target_tensors" in input_dict else None
 
       if self.both:
-        spec, _ = tf.split(spec, [self.n_feats['mel'], self.n_feats['magnitude']], axis=2)
+        spec, _ = tf.split(spec, [self.n_feats["mel"], self.n_feats["magnitude"]], axis=2)
 
     num_audio_features = self.n_feats["mel"] if self.both else self.n_feats
 
     self.prenet = Prenet(
-      self.params.get('prenet_units', 256),
-      self.params.get('prenet_layers', 2),
+      self.params.get("prenet_units", 256),
+      self.params.get("prenet_layers", 2),
       self.params.get("prenet_activation", tf.nn.relu),
       self.params["dtype"]
     )
@@ -196,12 +191,12 @@ class TransformerTTSDecoder(Decoder):
     self.postnet = Postnet(
       conv_layers=self.params["postnet_conv_layers"],
       num_audio_features=num_audio_features,
-      dropout_keep_prob=self.params.get('postnet_keep_dropout_prob', 0.5),
-      regularizer=self.params.get('regularizer', None),
+      dropout_keep_prob=self.params.get("postnet_keep_dropout_prob", 0.5),
+      regularizer=self.params.get("regularizer", None),
       training=self.training,
-      data_format=self.params.get('postnet_data_format', 'channels_last'),
-      bn_momentum=self.params.get('postnet_bn_momentum', 0.1),
-      bn_epsilon=self.params.get('postnet_bn_epsilon', 1e-5)
+      data_format=self.params.get("postnet_data_format", "channels_last"),
+      bn_momentum=self.params.get("postnet_bn_momentum", 0.1),
+      bn_epsilon=self.params.get("postnet_bn_epsilon", 1e-5)
     )
 
     self.output_projection_layer = tf.layers.Dense(name="output_proj", units=num_audio_features, use_bias=True)
@@ -237,8 +232,8 @@ class TransformerTTSDecoder(Decoder):
     )
 
     return {
-      'outputs': outputs,
-      'stop_token_prediction': stop_token_logits
+      "outputs": outputs,
+      "stop_token_prediction": stop_token_logits
     }
 
   def _inference_initial_state(self, encoder_outputs, encoder_decoder_attention_bias):
@@ -279,6 +274,7 @@ class TransformerTTSDecoder(Decoder):
 
   def _inference_step(self, state):
     # TODO: calculate sequence lengths
+    # TODO: calculate alignments
     inputs = state["inputs"]
     encoder_outputs = state["encoder_outputs"]
     encoder_decoder_attention_bias = state["encoder_decoder_attention_bias"]
@@ -332,8 +328,8 @@ class TransformerTTSDecoder(Decoder):
     state["outputs"][4] = tf.cast(state["outputs"][4] + 1000, tf.int32)
 
     return {
-      'outputs': state["outputs"],
-      'stop_token_prediction': state["stop_token_logits"]
+      "outputs": state["outputs"],
+      "stop_token_prediction": state["stop_token_logits"]
     }
 
 
