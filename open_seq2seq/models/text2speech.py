@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 
 from .encoder_decoder import EncoderDecoderModel
+from open_seq2seq.utils.utils import deco_print, log_summaries_from_dict
 
 def plot_spectrograms(
     specs,
@@ -300,10 +301,11 @@ class Text2Speech(EncoderDecoderModel):
       return dict_to_log
     return {}
 
-  def finalize_evaluation(self, results_per_batch, training_step=None):
+  def finalize_evaluation(self, results_per_batch, training_step=None, samples_count=1):
     dict_to_log = {}
     step = training_step
-    sample = results_per_batch[-1]
+    sample = results_per_batch[0]
+
     input_values = sample[0]
     output_values = sample[1]
     y_sample, stop_target = input_values['target_tensors']
@@ -426,14 +428,21 @@ class Text2Speech(EncoderDecoderModel):
       dict_to_log['audio'] = wav_summary
 
     if self._save_to_tensorboard:
+      log_summaries_from_dict(
+          dict_to_log,
+          self.params['logdir'],
+          step,
+      )
+
       return dict_to_log
+
     return {}
 
   def evaluate(self, input_values, output_values):
     # Need to reduce amount of data sent for horovod
-    output_values = [item[-3] for item in output_values]
+    output_values = [item[0] for item in output_values]
     input_values = {
-        key: [value[0][-3], value[1][-3]] for key, value in input_values.items()
+        key: [value[0][0], value[1][0]] for key, value in input_values.items()
     }
     return [input_values, output_values]
 

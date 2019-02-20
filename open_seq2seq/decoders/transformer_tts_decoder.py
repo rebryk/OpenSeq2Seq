@@ -285,7 +285,6 @@ class TransformerTTSDecoder(Decoder):
       encoder_decoder_attention_bias
     )
 
-    # TODO: avoid using last element
     spectrogram_prediction = outputs[1][:, -1:, :]
     mag_spec_prediction = outputs[5][:, -1:, :]
 
@@ -310,7 +309,7 @@ class TransformerTTSDecoder(Decoder):
 
   def predict(self, encoder_outputs, encoder_decoder_attention_bias):
     # TODO: choose better value
-    maximum_iterations = 1000
+    maximum_iterations = 700
 
     state, state_shape_invariants = self._inference_initial_state(encoder_outputs, encoder_decoder_attention_bias)
 
@@ -325,7 +324,7 @@ class TransformerTTSDecoder(Decoder):
     )
 
     # Update sequence lengths
-    state["outputs"][4] = tf.cast(state["outputs"][4] + 1000, tf.int32)
+    state["outputs"][4] = tf.cast(state["outputs"][4] + 700, tf.int32)
 
     return {
       "outputs": state["outputs"],
