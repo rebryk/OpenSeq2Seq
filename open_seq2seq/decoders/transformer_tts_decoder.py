@@ -1,6 +1,7 @@
 # This code is heavily based on the code from MLPerf
 # https://github.com/mlperf/reference/tree/master/translation/tensorflow/transformer
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import math_ops
@@ -245,9 +246,9 @@ class TransformerTTSDecoder(Decoder):
       "finished": tf.cast(tf.zeros([batch_size]), tf.bool),
       "outputs": [
         tf.zeros([batch_size, 1, 80]), tf.zeros([batch_size, 1, 80]), tf.zeros([batch_size, batch_size, batch_size]),
-        tf.zeros([batch_size, 1, 1]), tf.zeros([batch_size]), tf.zeros([batch_size, 1, 513])
+        tf.zeros([batch_size, 0, 1]), tf.zeros([batch_size], dtype=tf.int32), tf.zeros([batch_size, 1, 513])
       ],
-      "stop_token_logits": tf.zeros([batch_size, 1, 1]),
+      "stop_token_logits": tf.zeros([batch_size, 0, 1]),
       "encoder_outputs": encoder_outputs,
       "encoder_decoder_attention_bias": encoder_decoder_attention_bias
     }
@@ -288,16 +289,32 @@ class TransformerTTSDecoder(Decoder):
     spectrogram_prediction = outputs[1][:, -1:, :]
     mag_spec_prediction = outputs[5][:, -1:, :]
 
-    stop_token_prediction = outputs[3][:, -1:, :]
-    finished = tf.cast(tf.round(stop_token_prediction), tf.bool)
-    finished = tf.reshape(finished, [-1])
-
     if self.both:
       next_inputs = tf.concat([spectrogram_prediction, mag_spec_prediction], -1)
     else:
       next_inputs = spectrogram_prediction
 
+    # Set zero if sequence is finished
+    next_inputs = tf.where(state["finished"], tf.zeros_like(next_inputs), next_inputs)
     next_inputs = tf.concat([inputs, next_inputs], 1)
+
+    # Update lengths
+    lengths = state["outputs"][4]
+    lengths = tf.where(state["finished"], lengths, lengths + 1)
+    outputs[4] = lengths
+
+    # Update stop token logits
+    stop_logits = stop_token_logits[:, -1:, :]
+    stop_logits = tf.where(state["finished"], tf.zeros_like(stop_logits) + np.inf, stop_logits)
+    stop_token_logits = tf.concat([state["stop_token_logits"], stop_logits], 1)
+
+    # Set one if sequence is finished
+    stop_prediction = outputs[3][:, -1:, :]
+    stop_prediction = tf.where(state["finished"], tf.ones_like(stop_prediction), stop_prediction)
+    stop_token_prediction = tf.concat([state["outputs"][3], stop_prediction], 1)
+    outputs[3] = stop_token_prediction
+
+    finished = tf.reshape(tf.cast(tf.round(stop_prediction), tf.bool), [-1])
 
     state["iteration"] = state["iteration"] + 1
     state["inputs"] = next_inputs
@@ -309,7 +326,7 @@ class TransformerTTSDecoder(Decoder):
 
   def predict(self, encoder_outputs, encoder_decoder_attention_bias):
     # TODO: choose better value
-    maximum_iterations = 700
+    maximum_iterations = 1500
 
     state, state_shape_invariants = self._inference_initial_state(encoder_outputs, encoder_decoder_attention_bias)
 
@@ -322,9 +339,6 @@ class TransformerTTSDecoder(Decoder):
       maximum_iterations=maximum_iterations,
       parallel_iterations=1
     )
-
-    # Update sequence lengths
-    state["outputs"][4] = tf.cast(state["outputs"][4] + 700, tf.int32)
 
     return {
       "outputs": state["outputs"],

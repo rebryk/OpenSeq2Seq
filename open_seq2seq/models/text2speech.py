@@ -440,9 +440,11 @@ class Text2Speech(EncoderDecoderModel):
 
   def evaluate(self, input_values, output_values):
     # Need to reduce amount of data sent for horovod
-    output_values = [item[0] for item in output_values]
+    # Use last element
+    idx = -1
+    output_values = [item[idx] for item in output_values]
     input_values = {
-        key: [value[0][0], value[1][0]] for key, value in input_values.items()
+        key: [value[0][idx], value[1][idx]] for key, value in input_values.items()
     }
     return [input_values, output_values]
 

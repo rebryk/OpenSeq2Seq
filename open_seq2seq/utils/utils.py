@@ -242,7 +242,7 @@ def get_results_for_epoch(model, sess, compute_loss, mode, verbose=False):
     )
   else:
     results_per_batch = iterate_data(
-        model, sess, compute_loss, mode, verbose, num_steps=1
+        model, sess, compute_loss, mode, verbose
     )
 
   if compute_loss:

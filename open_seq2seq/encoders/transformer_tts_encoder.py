@@ -215,12 +215,7 @@ class TransformerTTSEncoder(Encoder):
       if self.mode == "train":
         encoder_inputs = tf.nn.dropout(encoder_inputs, keep_prob=1.0 - self.params["layer_postprocess_dropout"])
 
-      linear_projection = ffn_layer.FeedFowardNetwork(
-        self.params["hidden_size"], self.params["filter_size"],
-        relu_dropout=0.0, train=training
-      )
-      linear_projection = PrePostProcessingWrapper(linear_projection, self.params, training)
-
+      linear_projection = tf.layers.Dense(name="linear_projection", units=self.params["hidden_size"])
       encoder_inputs = linear_projection(encoder_inputs)
 
       encoded = self._call(encoder_inputs, inputs_attention_bias, inputs_padding)
@@ -228,8 +223,5 @@ class TransformerTTSEncoder(Encoder):
       return {
         "outputs": encoded,
         "inputs_attention_bias": inputs_attention_bias,
-        # "state": None,
-        "src_lengths": input_dict["source_tensors"][1],
-        # "embedding_softmax_layer": self.embedding_softmax_layer,
-        # "encoder_input": inputs
+        "src_lengths": input_dict["source_tensors"][1]
       }
