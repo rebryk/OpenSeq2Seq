@@ -57,7 +57,8 @@ class TransformerTTSDecoder(Decoder):
       "enable_prenet": bool,
       "prenet_layers": int,
       "prenet_units": int,
-      "prenet_activation": None
+      "prenet_activation": None,
+      "parallel_iterations": int
     })
 
   def _cast_types(self, input_dict):
@@ -178,12 +179,10 @@ class TransformerTTSDecoder(Decoder):
     encoder_outputs = input_dict["encoder_output"]["outputs"]
     inputs_attention_bias = input_dict["encoder_output"]["inputs_attention_bias"]
 
-    if self.training:
-      spec = input_dict["target_tensors"][0] if "target_tensors" in input_dict else None
-      spec_length = input_dict["target_tensors"][2] if "target_tensors" in input_dict else None
+    spec_length = None
 
-      if self.both:
-        spec, _ = tf.split(spec, [self.n_feats["mel"], self.n_feats["magnitude"]], axis=2)
+    if self.mode == "train" or self.mode == "eval":
+      spec_length = input_dict["target_tensors"][2] if "target_tensors" in input_dict else None
 
     num_audio_features = self.n_feats["mel"] if self.both else self.n_feats
 
@@ -223,7 +222,7 @@ class TransformerTTSDecoder(Decoder):
       self._regularize()
 
     if not self.training:
-      return self.predict(encoder_outputs, inputs_attention_bias)
+      return self._predict(encoder_outputs, inputs_attention_bias, spec_length)
 
     return self._train(targets, encoder_outputs, inputs_attention_bias, spec_length)
 
@@ -342,9 +341,12 @@ class TransformerTTSDecoder(Decoder):
 
     return state
 
-  def predict(self, encoder_outputs, encoder_decoder_attention_bias):
+  def _predict(self, encoder_outputs, encoder_decoder_attention_bias, sequence_lengths):
     # TODO: choose better value
-    maximum_iterations = 1500
+    if sequence_lengths is None:
+      maximum_iterations = 1000
+    else:
+      maximum_iterations = tf.reduce_max(sequence_lengths)
 
     state, state_shape_invariants = self._inference_initial_state(encoder_outputs, encoder_decoder_attention_bias)
 
@@ -355,7 +357,7 @@ class TransformerTTSDecoder(Decoder):
       shape_invariants=state_shape_invariants,
       back_prop=False,
       maximum_iterations=maximum_iterations,
-      parallel_iterations=1
+      parallel_iterations=self.params.get("parallel_iterations", 32)
     )
 
     return self._convert_outputs(state["outputs"])

@@ -63,16 +63,16 @@ base_params = {
   "random_seed": 0,
   "use_horovod": True,
   "max_steps": 1000000,
-  "bench_start": 0,
+  "bench_start": 100,
 
   "num_gpus": num_gpus,
   "batch_size_per_gpu": batch_size,
 
-  "save_summaries_steps": 50,
-  "print_loss_steps": 50,
-  "print_samples_steps": 500,
-  "eval_steps": 500,
-  "save_checkpoint_steps": 500,
+  "save_summaries_steps": 100,
+  "print_loss_steps": 100,
+  "print_samples_steps": 1000,
+  "eval_steps": 1000,
+  "save_checkpoint_steps": 1000,
   "save_to_tensorboard": True,
   "logdir": "result/transformer-LJ-float",
   "max_grad_norm": 1.,
@@ -166,7 +166,7 @@ base_params = {
         "activation_fn": tf.nn.relu
       }
     ],
-
+    "parallel_iterations": 32,
     "layer_postprocess_dropout": 0.1,
     "num_hidden_layers": num_layers,
     "hidden_size": decoder_hidden_size,
