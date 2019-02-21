@@ -229,6 +229,10 @@ class Text2SpeechDataLayer(DataLayer):
       else:
         self._files = self._files.append(files)
 
+    if self.params['mode'] == 'eval':
+      indices = self._files['transcript'].str.len().sort_values().index
+      self._files = self._files.reindex(indices)
+
     if (self.params['mode'] != 'infer'
         or self.params.get("style_input", None) == "wav"):
       cols = ['wav_filename', 'transcript']

@@ -63,13 +63,13 @@ base_params = {
   "random_seed": 0,
   "use_horovod": True,
   "max_steps": 1000000,
-  "bench_start": 100,
+  "bench_start": 0,
 
   "num_gpus": num_gpus,
   "batch_size_per_gpu": batch_size,
 
-  "save_summaries_steps": 100,
-  "print_loss_steps": 100,
+  "save_summaries_steps": 500,
+  "print_loss_steps": 500,
   "print_samples_steps": 1000,
   "eval_steps": 5000,
   "save_checkpoint_steps": 5000,
@@ -166,7 +166,7 @@ base_params = {
         "activation_fn": tf.nn.relu
       }
     ],
-    "parallel_iterations": 32,
+    "parallel_iterations": 1,
     "layer_postprocess_dropout": 0.1,
     "num_hidden_layers": num_layers,
     "hidden_size": decoder_hidden_size,
