@@ -6,7 +6,7 @@ import tensorflow as tf
 from open_seq2seq.data import Text2SpeechDataLayer
 from open_seq2seq.decoders import TransformerTTSDecoder
 from open_seq2seq.encoders import TransformerTTSEncoder
-from open_seq2seq.losses import TacotronLoss
+from open_seq2seq.losses import TransformerTTSLoss
 from open_seq2seq.models import Text2Speech
 from open_seq2seq.optimizers.lr_policies import exp_decay
 
@@ -176,7 +176,7 @@ base_params = {
     "filter_size": 4 * decoder_hidden_size,
   },
 
-  "loss": TacotronLoss,
+  "loss": TransformerTTSLoss,
   "loss_params": {
     "use_mask": True
   },

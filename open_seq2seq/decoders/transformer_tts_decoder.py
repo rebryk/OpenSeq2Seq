@@ -147,19 +147,27 @@ class TransformerTTSDecoder(Decoder):
     else:
       mag_spec_prediction = tf.zeros([batch_size, batch_size, batch_size])
 
-    # it"s just a stub
-    alignments = tf.zeros([batch_size, batch_size, batch_size])
-
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
 
-    stop_token_prediction = tf.sigmoid(stop_token_logits)
-    outputs = [
-        decoder_spec_output, spectrogram_prediction, alignments,
-        stop_token_prediction, sequence_lengths, mag_spec_prediction
-    ]
+    return {
+        "spec": decoder_spec_output,
+        "post_net_spec": spectrogram_prediction,
+        "alignments": tf.zeros([batch_size, batch_size, batch_size]),
+        "stop_token_logits": stop_token_logits,
+        "lengths": sequence_lengths,
+        "mag_spec": mag_spec_prediction
+    }
 
-    return outputs, stop_token_logits
+  @staticmethod
+  def _convert_outputs(outputs):
+    return {
+      "outputs": [
+        outputs["spec"], outputs["post_net_spec"], outputs["alignments"],
+        tf.sigmoid(outputs["stop_token_logits"]), outputs["lengths"], outputs["mag_spec"]
+      ],
+      "stop_token_logits": outputs["stop_token_logits"]
+    }
 
   def _decode(self, input_dict):
     if "target_tensors" in input_dict:
@@ -225,44 +233,50 @@ class TransformerTTSDecoder(Decoder):
     with tf.name_scope("shift_targets"):
       decoder_inputs = tf.pad(targets, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
 
-    outputs, stop_token_logits = self.decode_pass(
+    outputs = self.decode_pass(
       decoder_inputs,
       encoder_outputs,
       encoder_decoder_attention_bias,
       sequence_lengths
     )
 
-    return {
-      "outputs": outputs,
-      "stop_token_prediction": stop_token_logits
-    }
+    return self._convert_outputs(outputs)
+
 
   def _inference_initial_state(self, encoder_outputs, encoder_decoder_attention_bias):
+    # TODO: change channel size
+    # TODO: make mag spec optional
+
     batch_size = tf.shape(encoder_outputs)[0]
 
     state = {
       "iteration": tf.constant(0),
       "inputs": tf.zeros([batch_size, 1, self.features_count]),
       "finished": tf.cast(tf.zeros([batch_size]), tf.bool),
-      "outputs": [
-        tf.zeros([batch_size, 1, 80]), tf.zeros([batch_size, 1, 80]), tf.zeros([batch_size, batch_size, batch_size]),
-        tf.zeros([batch_size, 0, 1]), tf.zeros([batch_size], dtype=tf.int32), tf.zeros([batch_size, 1, 513])
-      ],
-      "stop_token_logits": tf.zeros([batch_size, 0, 1]),
+      "outputs": {
+        "spec": tf.zeros([batch_size, 0, 80]),
+        "post_net_spec": tf.zeros([batch_size, 0, 80]),
+        "alignments": tf.zeros([batch_size, batch_size, batch_size]),
+        "stop_token_logits": tf.zeros([batch_size, 0, 1]),
+        "lengths": tf.zeros([batch_size], dtype=tf.int32),
+        "mag_spec": tf.zeros([batch_size, 0, 513])
+      },
       "encoder_outputs": encoder_outputs,
       "encoder_decoder_attention_bias": encoder_decoder_attention_bias
     }
 
-    # TODO: change channel size
     state_shape_invariants = {
       "iteration": tf.TensorShape([]),
       "inputs": tf.TensorShape([None, None, self.features_count]),
       "finished": tf.TensorShape([None]),
-      "outputs": [
-        tf.TensorShape([None, None, 80]), tf.TensorShape([None, None, 80]), tf.TensorShape([None, None, None]),
-        tf.TensorShape([None, None, 1]), tf.TensorShape([None]), tf.TensorShape([None, None, 513])
-      ],
-      "stop_token_logits": tf.TensorShape([None, None, 1]),
+      "outputs": {
+        "spec": tf.TensorShape([None, None, 80]),
+        "post_net_spec": tf.TensorShape([None, None, 80]),
+        "alignments": tf.TensorShape([None, None, None]),
+        "stop_token_logits": tf.TensorShape([None, None, 1]),
+        "lengths": tf.TensorShape([None]),
+        "mag_spec": tf.TensorShape([None, None, 513])
+      },
       "encoder_outputs": encoder_outputs.shape,
       "encoder_decoder_attention_bias": encoder_decoder_attention_bias.shape
     }
@@ -280,14 +294,14 @@ class TransformerTTSDecoder(Decoder):
     encoder_outputs = state["encoder_outputs"]
     encoder_decoder_attention_bias = state["encoder_decoder_attention_bias"]
 
-    outputs, stop_token_logits = self.decode_pass(
+    outputs = self.decode_pass(
       inputs,
       encoder_outputs,
       encoder_decoder_attention_bias
     )
 
-    spectrogram_prediction = outputs[1][:, -1:, :]
-    mag_spec_prediction = outputs[5][:, -1:, :]
+    spectrogram_prediction = outputs["post_net_spec"][:, -1:, :]
+    mag_spec_prediction = outputs["mag_spec"][:, -1:, :]
 
     if self.both:
       next_inputs = tf.concat([spectrogram_prediction, mag_spec_prediction], -1)
@@ -299,28 +313,32 @@ class TransformerTTSDecoder(Decoder):
     next_inputs = tf.concat([inputs, next_inputs], 1)
 
     # Update lengths
-    lengths = state["outputs"][4]
+    lengths = state["outputs"]["lengths"]
     lengths = tf.where(state["finished"], lengths, lengths + 1)
-    outputs[4] = lengths
+    outputs["lengths"] = lengths
+
+    # Update spec, post_net_spec and mag_spec
+    for key in ["spec", "post_net_spec", "mag_spec"]:
+      output = outputs[key][:, -1:, :]
+      output = tf.where(state["finished"], tf.zeros_like(output), output)
+      outputs[key] = tf.concat([state["outputs"][key], output], 1)
 
     # Update stop token logits
-    stop_logits = stop_token_logits[:, -1:, :]
-    stop_logits = tf.where(state["finished"], tf.zeros_like(stop_logits) + np.inf, stop_logits)
-    stop_token_logits = tf.concat([state["stop_token_logits"], stop_logits], 1)
-
-    # Set one if sequence is finished
-    stop_prediction = outputs[3][:, -1:, :]
-    stop_prediction = tf.where(state["finished"], tf.ones_like(stop_prediction), stop_prediction)
-    stop_token_prediction = tf.concat([state["outputs"][3], stop_prediction], 1)
-    outputs[3] = stop_token_prediction
-
+    stop_token_logits = outputs["stop_token_logits"][:, -1:, :]
+    stop_token_logits = tf.where(
+      state["finished"],
+      tf.zeros_like(stop_token_logits) + np.finfo(np.float32).max,
+      stop_token_logits
+    )
+    stop_prediction = tf.sigmoid(stop_token_logits)
     finished = tf.reshape(tf.cast(tf.round(stop_prediction), tf.bool), [-1])
+    stop_token_logits = tf.concat([state["outputs"]["stop_token_logits"], stop_token_logits], 1)
+    outputs["stop_token_logits"] = stop_token_logits
 
     state["iteration"] = state["iteration"] + 1
     state["inputs"] = next_inputs
     state["finished"] = finished
     state["outputs"] = outputs
-    state["stop_token_logits"] = stop_token_logits
 
     return state
 
@@ -340,9 +358,5 @@ class TransformerTTSDecoder(Decoder):
       parallel_iterations=1
     )
 
-    return {
-      "outputs": state["outputs"],
-      "stop_token_prediction": state["stop_token_logits"]
-    }
-
+    return self._convert_outputs(state["outputs"])
 
