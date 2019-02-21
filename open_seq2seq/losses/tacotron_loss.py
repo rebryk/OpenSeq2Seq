@@ -97,10 +97,10 @@ class TacotronLoss(Loss):
         ]
     )
     stop_token_pred_pad = tf.zeros(
-        [batch_size, max_length - tf.shape(decoder_predictions)[1], 1]
-    ) + np.inf
+      [batch_size, max_length - tf.shape(decoder_predictions)[1], 1]
+    )
     spec_pad = tf.zeros([batch_size, max_length - tf.shape(spec)[1], num_feats])
-    stop_token_pad = tf.ones([batch_size, max_length - tf.shape(spec)[1], 1])
+    stop_token_pad = tf.zeros([batch_size, max_length - tf.shape(spec)[1], 1])
     decoder_predictions = tf.concat(
         [decoder_predictions, decoder_pad], axis=1
     )
