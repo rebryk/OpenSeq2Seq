@@ -56,7 +56,7 @@ num_gpus = 8
 encoder_hidden_size = 512
 decoder_hidden_size = 512
 
-num_heads = 6
+num_heads = 4
 num_layers = 4
 
 base_params = {
