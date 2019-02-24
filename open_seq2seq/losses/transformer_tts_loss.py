@@ -72,7 +72,7 @@ class TransformerTTSLoss(Loss):
     )
     stop_token_pred_pad = tf.zeros(
       [batch_size, max_length - tf.shape(decoder_predictions)[1], 1]
-    ) + np.finfo(np.float32).max
+    ) + 1e6
     spec_pad = tf.zeros([batch_size, max_length - tf.shape(spec)[1], num_feats])
     stop_token_pad = tf.ones([batch_size, max_length - tf.shape(spec)[1], 1])
     decoder_predictions = tf.concat(
