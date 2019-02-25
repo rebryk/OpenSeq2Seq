@@ -147,15 +147,10 @@ class TransformerTTSLoss(Loss):
       )
       stop_token_loss = tf.reduce_mean(stop_token_loss)
 
-    decoder_loss = tf.Print(decoder_loss, [decoder_loss], "decoder loss: ")
-    post_net_loss = tf.Print(post_net_loss, [post_net_loss], "post net loss: ")
-    stop_token_loss = tf.Print(stop_token_loss, [stop_token_loss], "stop token loss: ")
-
     stop_token_weight = self.params.get("stop_token_weight", 1.0)
     loss = decoder_loss + post_net_loss + stop_token_weight * stop_token_loss
 
     if self._both:
-      mag_loss = tf.Print(mag_loss, [mag_loss], "mag loss: ")
       loss += mag_loss
 
     if self.params.get("scale", None):
