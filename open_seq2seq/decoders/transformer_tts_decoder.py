@@ -139,6 +139,33 @@ class TransformerTTSDecoder(Decoder):
       attention_bias=encoder_decoder_attention_bias,
     )
 
+    if self.mode == 'train':
+      ops = [
+        "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights",
+        "ForwardPass/transformer_tts_decoder/layer_{}/self_attention/self_attention/attention_weights",
+        "ForwardPass/transformer_tts_decoder/layer_{}/encdec_attention/attention/attention_weights"
+      ]
+
+      alignments = []
+
+      for op in ops:
+        attention_weights = []
+
+        for i in range(self.params["num_hidden_layers"]):
+          attention_weights_op = tf.get_default_graph().get_operation_by_name(op.format(i))
+          attention_weights.append(attention_weights_op.values()[0])
+
+        alignments.append(tf.stack(attention_weights))
+    else:
+      # TODO: get name
+      # dec_self_op = 'ForwardPass_2/transformer_tts_decoder/while/layer_{}/self_attention/self_attention/attention_weights'
+      # dec_encdec_op = 'ForwardPass_3/transformer_tts_decoder/while/layer_{}/encdec_attention/attention/attention_weights'
+
+      alignments = []
+
+      for _ in range(3):
+        alignments.append(tf.zeros([batch_size, batch_size, batch_size, batch_size, batch_size]))
+
     decoder_spec_output = self.output_projection_layer(decoder_output)
     stop_token_logits = self.stop_token_projection_layer(decoder_spec_output)
     spectrogram_prediction = decoder_spec_output + self.postnet(decoder_spec_output)
@@ -154,7 +181,7 @@ class TransformerTTSDecoder(Decoder):
     return {
         "spec": decoder_spec_output,
         "post_net_spec": spectrogram_prediction,
-        "alignments": tf.zeros([batch_size, batch_size, batch_size]),
+        "alignments": alignments,
         "stop_token_logits": stop_token_logits,
         "lengths": sequence_lengths,
         "mag_spec": mag_spec_prediction
@@ -255,7 +282,11 @@ class TransformerTTSDecoder(Decoder):
       "outputs": {
         "spec": tf.zeros([batch_size, 0, 80]),
         "post_net_spec": tf.zeros([batch_size, 0, 80]),
-        "alignments": tf.zeros([batch_size, batch_size, batch_size]),
+        "alignments": [
+          tf.zeros([0, 0, 0, 0, 0]),
+          tf.zeros([0, 0, 0, 0, 0]),
+          tf.zeros([0, 0, 0, 0, 0])
+        ],
         "stop_token_logits": tf.zeros([batch_size, 0, 1]),
         "lengths": tf.zeros([batch_size], dtype=tf.int32),
         "mag_spec": tf.zeros([batch_size, 0, 513])
@@ -271,7 +302,11 @@ class TransformerTTSDecoder(Decoder):
       "outputs": {
         "spec": tf.TensorShape([None, None, 80]),
         "post_net_spec": tf.TensorShape([None, None, 80]),
-        "alignments": tf.TensorShape([None, None, None]),
+        "alignments": [
+          tf.TensorShape([None, None, None, None, None]),
+          tf.TensorShape([None, None, None, None, None]),
+          tf.TensorShape([None, None, None, None, None])
+        ],
         "stop_token_logits": tf.TensorShape([None, None, 1]),
         "lengths": tf.TensorShape([None]),
         "mag_spec": tf.TensorShape([None, None, 513])

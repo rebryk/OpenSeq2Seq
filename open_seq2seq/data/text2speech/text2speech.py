@@ -51,6 +51,8 @@ class Text2SpeechDataLayer(DataLayer):
             'mel_type': ['slaney', 'htk'],
             "exp_mag": bool,
             'style_input': [None, 'wav'],
+            'n_samples_train': int,
+            'n_samples_eval': int
         }
     )
 
@@ -229,9 +231,21 @@ class Text2SpeechDataLayer(DataLayer):
       else:
         self._files = self._files.append(files)
 
+    if self.params['mode'] == 'train' and 'n_samples_train' in self.params:
+      indices = self._files['transcript'].str.len().sort_values().index
+      self._files = self._files.reindex(indices)
+
+      n_samples = self.params.get('n_samples_train')
+      print('Using just the {} shortest samples'.format(n_samples))
+      self._files = self._files.iloc[:n_samples]
+
     if self.params['mode'] == 'eval':
       indices = self._files['transcript'].str.len().sort_values().index
       self._files = self._files.reindex(indices)
+
+      if 'n_samples_eval' in self.params:
+        n_samples = self.params['n_samples_eval']
+        self._files = self._files.iloc[:n_samples]
 
     if (self.params['mode'] != 'infer'
         or self.params.get("style_input", None) == "wav"):

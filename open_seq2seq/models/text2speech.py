@@ -221,22 +221,28 @@ class Text2Speech(EncoderDecoderModel):
     stop_target = stop_target[0]
     predicted_spec = predicted_decoder_spec[0]
     predicted_final_spec = predicted_final_spec[0]
-    attention_mask = attention_mask[0]
     stop_token_pred = stop_token_pred[0]
     audio_length = output_values[4][0]
 
     specs = [
         y_sample,
         predicted_spec,
-        predicted_final_spec,
-        attention_mask
+        predicted_final_spec
     ]
+
     titles = [
         "training data",
         "decoder results",
-        "post net results",
-        "alignments"
+        "post net results"
     ]
+
+    alignments_name = ["enc_self_alignment", "dec_self_alignment", "dec_encdec_alignment"]
+
+    for name, alignment in zip(alignments_name, attention_mask):
+      for layer in range(alignment.shape[0])[-1:]:
+        for head in range(alignment.shape[1]):
+          specs.append(alignment[layer][head][0])
+          titles.append("{}_layer_{}_head_{}".format(name, layer, head))
 
     if "both" in self.get_data_layer().params['output_type']:
       specs.append(output_values[5][0])
@@ -321,10 +327,10 @@ class Text2Speech(EncoderDecoderModel):
         ]
     )
 
-    alignments_pad = np.zeros(
-        [max_length - np.shape(predicted_final_spec)[0],
-        attention_mask.shape[1]]
-    )
+    # alignments_pad = np.zeros(
+    #     [max_length - np.shape(predicted_final_spec)[0],
+    #     attention_mask.shape[1]]
+    # )
 
     predictions_pad = np.zeros(
         [max_length - np.shape(predicted_final_spec)[0], np.shape(predicted_final_spec)[-1]]
@@ -346,19 +352,19 @@ class Text2Speech(EncoderDecoderModel):
     )
     y_sample = np.concatenate([y_sample, spec_pad], axis=0)
     stop_target = np.concatenate([stop_target, stop_token_pad], axis=0)
-    attention_mask = np.concatenate([attention_mask, alignments_pad], axis=0)
+    # attention_mask = np.concatenate([attention_mask, alignments_pad], axis=0)
 
     specs = [
         y_sample,
         predicted_spec,
         predicted_final_spec,
-        attention_mask
+        # attention_mask
     ]
     titles = [
         "training data",
         "decoder results",
         "post net results",
-        "alignments"
+        # "alignments"
     ]
 
     if "both" in self.get_data_layer().params['output_type']:
