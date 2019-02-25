@@ -361,7 +361,7 @@ class TransformerTTSDecoder(Decoder):
     stop_token_logits = outputs["stop_token_logits"][:, -1:, :]
     stop_token_logits = tf.where(
       state["finished"],
-      tf.zeros_like(stop_token_logits) + np.finfo(np.float32).max,
+      tf.zeros_like(stop_token_logits),
       stop_token_logits
     )
     stop_prediction = tf.sigmoid(stop_token_logits)
