@@ -230,8 +230,7 @@ class TransformerTTSDecoder(Decoder):
       self.params.get("prenet_units", 256),
       self.params.get("prenet_layers", 2),
       self.params.get("prenet_activation", tf.nn.relu),
-      self.params["dtype"],
-      self.training
+      self.params["dtype"]
     )
 
     self.decoder = TransformerDecoder(self.params, self.training)
