@@ -57,8 +57,7 @@ encoder_hidden_size = 512
 decoder_hidden_size = 512
 
 num_heads = 8
-encoder_num_layers = 2
-decoder_num_layers = 6
+num_layers = 4
 
 base_params = {
   "random_seed": 0,
@@ -120,7 +119,7 @@ base_params = {
     "data_format": "channels_last",
 
     "src_vocab_size": 94,
-    "encoder_layers": encoder_num_layers,
+    "encoder_layers": num_layers,
     "hidden_size": encoder_hidden_size,
     "num_heads": num_heads,
     "attention_dropout": 0.1,
@@ -169,7 +168,7 @@ base_params = {
     ],
     "parallel_iterations": 1,
     "layer_postprocess_dropout": 0.1,
-    "num_hidden_layers": decoder_num_layers,
+    "num_hidden_layers": num_layers,
     "hidden_size": decoder_hidden_size,
     "num_heads": num_heads,
     "attention_dropout": 0.1,

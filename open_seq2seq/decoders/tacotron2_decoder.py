@@ -60,7 +60,7 @@ class Prenet():
     Applies the prenet to the inputs
     """
     for layer in self.prenet_layers:
-      inputs = tf.layers.dropout(layer(inputs), rate=0.5, training=True)
+      inputs = tf.layers.dropout(layer(inputs), rate=0.7, training=True)
     return inputs
 
   @property
