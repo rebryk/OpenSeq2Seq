@@ -335,7 +335,6 @@ class TransformerTTSDecoder(Decoder):
     return tf.logical_not(all_finished)
 
   def _inference_step(self, state):
-    # TODO: calculate sequence lengths
     # TODO: calculate alignments
     inputs = state["inputs"]
     encoder_outputs = state["encoder_outputs"]
@@ -378,7 +377,11 @@ class TransformerTTSDecoder(Decoder):
       stop_token_logits
     )
     stop_prediction = tf.sigmoid(stop_token_logits)
-    finished = tf.reshape(tf.cast(tf.round(stop_prediction), tf.bool), [-1])
+
+    # TODO: uncomment next line if you want to use stop token predictions
+    # finished = tf.reshape(tf.cast(tf.round(stop_prediction), tf.bool), [-1])
+    finished = tf.reshape(tf.cast(tf.round(tf.zeros_like(stop_prediction)), tf.bool), [-1])
+
     stop_token_logits = tf.concat([state["outputs"]["stop_token_logits"], stop_token_logits], 1)
     outputs["stop_token_logits"] = stop_token_logits
 
