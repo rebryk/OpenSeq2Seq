@@ -28,8 +28,9 @@ class Prenet():
       num_units,
       num_layers,
       activation_fn=None,
-      dtype=None
-  ):
+      dtype=None,
+      training=True
+    ):
     """Prenet initializer
 
     Args:
@@ -43,6 +44,7 @@ class Prenet():
     ), "If the prenet is enabled, there must be at least 1 layer"
     self.prenet_layers = []
     self._output_size = num_units
+    self.training = training
 
     for idx in range(num_layers):
       self.prenet_layers.append(
@@ -60,7 +62,7 @@ class Prenet():
     Applies the prenet to the inputs
     """
     for layer in self.prenet_layers:
-      inputs = tf.layers.dropout(layer(inputs), rate=0.7, training=True)
+      inputs = tf.layers.dropout(layer(inputs), rate=0.5, training=self.training)
     return inputs
 
   @property
