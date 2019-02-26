@@ -71,7 +71,7 @@ base_params = {
   "save_summaries_steps": 1000,
   "print_loss_steps": 1000,
   "print_samples_steps": 1000,
-  "eval_steps": 10000,
+  "eval_steps": 5000,
   "save_checkpoint_steps": 5000,
   "save_to_tensorboard": True,
   "logdir": "result/transformer-LJ-float",
