@@ -140,19 +140,32 @@ class TransformerTTSDecoder(Decoder):
     )
 
     if self.mode == 'train':
+      alignments = []
+
+      enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
+      attention_weights = []
+
+      layer = 0
+      while True:
+        try:
+          attention_weights_op = tf.get_default_graph().get_operation_by_name(enc_op.format(layer))
+          attention_weights.append(attention_weights_op.values()[0])
+          layer += 1
+        except:
+          break
+
+      alignments.append(tf.stack(attention_weights))
+
       ops = [
-        "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights",
         "ForwardPass/transformer_tts_decoder/layer_{}/self_attention/self_attention/attention_weights",
         "ForwardPass/transformer_tts_decoder/layer_{}/encdec_attention/attention/attention_weights"
       ]
 
-      alignments = []
-
       for op in ops:
         attention_weights = []
 
-        for i in range(self.params["num_hidden_layers"]):
-          attention_weights_op = tf.get_default_graph().get_operation_by_name(op.format(i))
+        for layer in range(self.params["num_hidden_layers"]):
+          attention_weights_op = tf.get_default_graph().get_operation_by_name(op.format(layer))
           attention_weights.append(attention_weights_op.values()[0])
 
         alignments.append(tf.stack(attention_weights))

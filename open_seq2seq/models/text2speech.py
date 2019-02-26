@@ -239,8 +239,11 @@ class Text2Speech(EncoderDecoderModel):
     alignments_name = ["enc_self_alignment", "dec_self_alignment", "dec_encdec_alignment"]
 
     for name, alignment in zip(alignments_name, attention_mask):
-      for layer in range(alignment.shape[0])[-1:]:
-        for head in range(alignment.shape[1]):
+      n_layers = alignment.shape[0]
+      layers = [0] + [n_layers - 1] if n_layers > 1 else []
+
+      for layer in layers:
+        for head in range(alignment.shape[1])[:3]:
           specs.append(alignment[layer][head][0])
           titles.append("{}_layer_{}_head_{}".format(name, layer, head))
 
