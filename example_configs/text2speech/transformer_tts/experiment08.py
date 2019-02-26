@@ -27,7 +27,7 @@ elif dataset == "LJ":
   mag_num_feats = 513
   train = "test.csv"
   val = "test.csv"
-  batch_size = 8
+  batch_size = 16
 else:
   raise ValueError("Unknown dataset")
 
