@@ -54,7 +54,7 @@ else:
 num_gpus = 8
 
 encoder_hidden_size = 512
-decoder_hidden_size = 1024
+decoder_hidden_size = 512
 
 num_heads = 8
 num_layers = 4
