@@ -179,7 +179,7 @@ base_params = {
   "loss": TransformerTTSLoss,
   "loss_params": {
     "use_mask": True,
-    "stop_token_weight": 0.0
+    "stop_token_weight": 0.1,
   },
 
   "data_layer": Text2SpeechDataLayer,
