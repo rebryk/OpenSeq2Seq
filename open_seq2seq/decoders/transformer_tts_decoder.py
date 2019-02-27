@@ -9,6 +9,7 @@ from tensorflow.python.ops import math_ops
 from open_seq2seq.decoders.tacotron2_decoder import Prenet
 from open_seq2seq.parts.transformer import utils
 from open_seq2seq.parts.transformer_tts import TransformerDecoder, Postnet, MagSpecPostnet
+from open_seq2seq.parts.transformer_tts.utils import get_window_attention_bias, NEG_INF
 from .decoder import Decoder
 
 
@@ -58,7 +59,8 @@ class TransformerTTSDecoder(Decoder):
       "prenet_layers": int,
       "prenet_units": int,
       "prenet_activation": None,
-      "parallel_iterations": int
+      "parallel_iterations": int,
+      "window_size": int
     })
 
   def _cast_types(self, input_dict):
@@ -117,7 +119,7 @@ class TransformerTTSDecoder(Decoder):
     if self.params.get("enable_prenet", True):
       self.prenet.add_regularization(self.regularizer)
 
-  def decode_pass(self, decoder_inputs, encoder_outputs, encoder_decoder_attention_bias, sequence_lengths=None):
+  def decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
     batch_size = tf.shape(decoder_inputs)[0]
     length = tf.shape(decoder_inputs)[1]
 
@@ -130,13 +132,16 @@ class TransformerTTSDecoder(Decoder):
       decoder_inputs += position_encoding
 
     decoder_inputs = self.prenet(decoder_inputs)
-    decoder_self_attention_bias = utils.get_decoder_self_attention_bias(length)
+
+    length = tf.shape(decoder_inputs)[1]
+    window_size = self.params.get("window_size", -1)
+    decoder_self_attention_bias = get_window_attention_bias(length, window_size, causal=True)
 
     decoder_output = self.decoder(
       decoder_inputs=decoder_inputs,
       encoder_outputs=encoder_outputs,
       decoder_self_attention_bias=decoder_self_attention_bias,
-      attention_bias=encoder_decoder_attention_bias,
+      attention_bias=enc_dec_attention_bias,
     )
 
     if self.mode == 'train':

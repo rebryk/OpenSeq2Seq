@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 
 import tensorflow as tf
 from six.moves import range
-from open_seq2seq.parts.transformer_tts.utils import get_encoder_self_attention_bias
+from open_seq2seq.parts.transformer_tts.utils import get_window_attention_bias
 from open_seq2seq.parts.cnns.conv_blocks import conv_bn_actv
 from open_seq2seq.encoders import Encoder
 from open_seq2seq.parts.transformer import attention_layer, ffn_layer, utils, \
@@ -208,11 +208,6 @@ class TransformerTTSEncoder(Encoder):
       inputs_attention_bias = utils.get_padding_bias(inputs)
       self_attention_bias = inputs_attention_bias
 
-      window_size = self.params.get("window_size", -1)
-
-      if window_size != -1:
-        self_attention_bias += get_encoder_self_attention_bias(inputs, window_size)
-
       with tf.name_scope("add_pos_encoding"):
         length = tf.shape(prenet_inputs)[1]
         pos_encoding = utils.get_position_encoding(length, self.params["hidden_size"])
@@ -223,6 +218,10 @@ class TransformerTTSEncoder(Encoder):
 
       linear_projection = tf.layers.Dense(name="linear_projection", units=self.params["hidden_size"])
       encoder_inputs = linear_projection(encoder_inputs)
+
+      length = tf.shape(encoder_inputs)[1]
+      window_size = self.params.get("window_size", -1)
+      self_attention_bias += get_window_attention_bias(length, window_size)
 
       encoded = self._call(encoder_inputs, self_attention_bias, inputs_padding)
 
