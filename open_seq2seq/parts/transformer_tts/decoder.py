@@ -9,7 +9,7 @@ from open_seq2seq.parts.transformer.common import PrePostProcessingWrapper, Laye
 
 
 class TransformerDecoder:
-  def __init__(self, params, training):
+  def __init__(self, params, training, monotonic=False):
     self.layers = []
 
     for _ in range(params["num_hidden_layers"]):
@@ -19,7 +19,7 @@ class TransformerDecoder:
       )
       enc_dec_attention_layer = attention_layer.Attention(
         params["hidden_size"], params["num_heads"],
-        params["attention_dropout"], training
+        params["attention_dropout"], training, monotonic=monotonic
       )
       feed_forward_network = ffn_layer.FeedFowardNetwork(
         params["hidden_size"], params["filter_size"],

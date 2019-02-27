@@ -238,7 +238,7 @@ class TransformerTTSDecoder(Decoder):
       self.params["dtype"]
     )
 
-    self.decoder = TransformerDecoder(self.params, self.training)
+    self.decoder = TransformerDecoder(self.params, self.training, monotonic=False)
 
     # The same decoder post-net is used in Tacotron2
     self.postnet = Postnet(

@@ -30,7 +30,8 @@ class Attention(tf.layers.Layer):
       num_heads,
       attention_dropout,
       train,
-      mode="loung"
+      mode="loung",
+      monotonic=False
   ):
     if hidden_size % num_heads != 0:
       raise ValueError("Hidden size must be evenly divisible by the number of "
@@ -42,6 +43,7 @@ class Attention(tf.layers.Layer):
     self.attention_dropout = attention_dropout
     self.train = train
     self.mode = mode
+    self.monotonic = monotonic
 
     # Layers for linearly projecting the queries, keys, and values.
     self.q_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="q")
