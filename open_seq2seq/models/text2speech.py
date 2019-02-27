@@ -240,7 +240,7 @@ class Text2Speech(EncoderDecoderModel):
 
     for name, alignment in zip(alignments_name, attention_mask):
       n_layers = alignment.shape[0]
-      layers = [0] + [n_layers - 1] if n_layers > 1 else []
+      layers = [0] + ([n_layers - 1] if n_layers > 1 else [])
 
       for layer in layers:
         for head in range(alignment.shape[2])[:3]:
