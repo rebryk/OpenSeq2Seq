@@ -306,7 +306,7 @@ class TransformerTTSDecoder(Decoder):
         ],
         "stop_token_logits": tf.zeros([batch_size, 0, 1]),
         "lengths": tf.zeros([batch_size], dtype=tf.int32),
-        "mag_spec": tf.zeros([batch_size, 0, 513]) if self.both else tf.zeros([batch_size, 0, 0])
+        "mag_spec": tf.zeros([batch_size, 0, 513]) if self.both else tf.zeros([batch_size, 0, batch_size])
       },
       "encoder_outputs": encoder_outputs,
       "encoder_decoder_attention_bias": encoder_decoder_attention_bias
