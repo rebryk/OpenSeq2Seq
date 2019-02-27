@@ -152,6 +152,43 @@ class Attention(tf.layers.Layer):
       else:
         logits += bias
         weights = tf.nn.softmax(logits, name="attention_weights")
+
+        if self.monotonic and self.train:
+          init_length = 5
+          n_samples = tf.shape(weights)[0]
+          n_head = tf.shape(weights)[1]
+          n_audio = tf.shape(weights)[2]
+          n_text = tf.shape(weights)[3]
+
+          # Create init attention
+          mask_one = tf.ones([n_samples, n_head, 1, init_length], dtype=dtype)
+          mask_zero = tf.zeros([n_samples, n_head, 1, n_text - init_length], dtype=dtype)
+          mask = tf.concat([mask_one, mask_zero], axis=3) / init_length
+
+          weights = tf.concat([mask, weights], axis=2)
+          weights = tf.concat([tf.zeros([n_samples, n_head, n_audio + 1, 1]), weights], axis=3)
+
+          # weights = tf.Print(weights, [weights[0][0][1:]], "before cumsum: ", summarize=20)
+          weights = tf.cumsum(weights, axis=3)
+          # weights = tf.Print(weights, [tf.reduce_max(weights)], "max: ")
+          # weights = tf.Print(weights, [tf.reduce_min(weights)], "min: ")
+
+          # weights = tf.Print(weights, [weights[0][0][1:]], "before cumprod: ", summarize=20)
+          weights = tf.cumprod(weights, axis=2)
+          # weights = tf.Print(weights, [tf.reduce_max(weights)], "max after: ")
+          # weights = tf.Print(weights, [tf.reduce_min(weights)], "min after: ")
+
+          # weights = tf.Print(weights, [weights[0][0][1:]], "before sub: ", summarize=20)
+          weights = weights[:, :, :, 1:] - weights[:, :, :, :-1]
+          weights = weights[:, :, 1:, :]
+          # weights = tf.Print(weights, [weights[0][0]], "after sub: ", summarize=20)
+
+          # weights = tf.nn.softmax(weights + 1)
+
+        if self.monotonic and not self.train:
+          # TODO: implement
+          pass
+
     elif self.mode == "bahdanau":
       att_v = tf.get_variable(
           "attention_v", [self.hidden_size // self.num_heads], dtype=q.dtype
