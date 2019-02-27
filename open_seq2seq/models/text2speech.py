@@ -243,8 +243,8 @@ class Text2Speech(EncoderDecoderModel):
       layers = [0] + [n_layers - 1] if n_layers > 1 else []
 
       for layer in layers:
-        for head in range(alignment.shape[1])[:3]:
-          specs.append(alignment[layer][head][0])
+        for head in range(alignment.shape[2])[:3]:
+          specs.append(alignment[layer][0][head])
           titles.append("{}_layer_{}_head_{}".format(name, layer, head))
 
     if "both" in self.get_data_layer().params['output_type']:
