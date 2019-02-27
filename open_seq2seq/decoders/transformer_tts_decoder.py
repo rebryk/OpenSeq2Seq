@@ -286,7 +286,6 @@ class TransformerTTSDecoder(Decoder):
 
     return self._convert_outputs(outputs)
 
-
   def _inference_initial_state(self, encoder_outputs, encoder_decoder_attention_bias):
     # TODO: change channel size
     # TODO: make mag spec optional
@@ -307,7 +306,7 @@ class TransformerTTSDecoder(Decoder):
         ],
         "stop_token_logits": tf.zeros([batch_size, 0, 1]),
         "lengths": tf.zeros([batch_size], dtype=tf.int32),
-        "mag_spec": tf.zeros([batch_size, 0, 513])
+        "mag_spec": tf.zeros([batch_size, 0, 513]) if self.both else tf.zeros([batch_size, 0, 0])
       },
       "encoder_outputs": encoder_outputs,
       "encoder_decoder_attention_bias": encoder_decoder_attention_bias
@@ -327,7 +326,7 @@ class TransformerTTSDecoder(Decoder):
         ],
         "stop_token_logits": tf.TensorShape([None, None, 1]),
         "lengths": tf.TensorShape([None]),
-        "mag_spec": tf.TensorShape([None, None, 513])
+        "mag_spec": tf.TensorShape([None, None, None])
       },
       "encoder_outputs": encoder_outputs.shape,
       "encoder_decoder_attention_bias": encoder_decoder_attention_bias.shape
