@@ -60,7 +60,8 @@ class TransformerTTSDecoder(Decoder):
       "prenet_units": int,
       "prenet_activation": None,
       "parallel_iterations": int,
-      "window_size": int
+      "window_size": int,
+      "monotonic": bool
     })
 
   def _cast_types(self, input_dict):
@@ -238,7 +239,8 @@ class TransformerTTSDecoder(Decoder):
       self.params["dtype"]
     )
 
-    self.decoder = TransformerDecoder(self.params, self.training, monotonic=False)
+    monotonic = self.params.get("monotonic", False)
+    self.decoder = TransformerDecoder(self.params, self.training, monotonic=monotonic)
 
     # The same decoder post-net is used in Tacotron2
     self.postnet = Postnet(

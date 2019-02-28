@@ -18,7 +18,31 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import numpy as np
 import tensorflow as tf
+from tensorflow.python.framework import ops
+from tensorflow.python.ops import clip_ops
+from tensorflow.python.ops import math_ops
+
+
+def safe_cumprod(x, *args, **kwargs):
+  """Computes cumprod of x in logspace using cumsum to avoid underflow.
+  The cumprod function and its gradient can result in numerical instabilities
+  when its argument has very small and/or zero values.  As long as the argument
+  is all positive, we can instead compute the cumulative product as
+  exp(cumsum(log(x))).  This function can be called identically to tf.cumprod.
+  Args:
+    x: Tensor to take the cumulative product of.
+    *args: Passed on to cumsum; these are identical to those in cumprod.
+    **kwargs: Passed on to cumsum; these are identical to those in cumprod.
+  Returns:
+    Cumulative product of x.
+  """
+  with ops.name_scope(None, "SafeCumprod", [x]):
+    x = ops.convert_to_tensor(x, name="x")
+    tiny = np.finfo(x.dtype.as_numpy_dtype).tiny
+    return math_ops.exp(math_ops.cumsum(
+        math_ops.log(clip_ops.clip_by_value(x, tiny, 1)), *args, **kwargs))
 
 
 class Attention(tf.layers.Layer):
@@ -167,23 +191,10 @@ class Attention(tf.layers.Layer):
 
           weights = tf.concat([mask, weights], axis=2)
           weights = tf.concat([tf.zeros([n_samples, n_head, n_audio + 1, 1]), weights], axis=3)
-
-          # weights = tf.Print(weights, [weights[0][0][1:]], "before cumsum: ", summarize=20)
           weights = tf.cumsum(weights, axis=3)
-          # weights = tf.Print(weights, [tf.reduce_max(weights)], "max: ")
-          # weights = tf.Print(weights, [tf.reduce_min(weights)], "min: ")
-
-          # weights = tf.Print(weights, [weights[0][0][1:]], "before cumprod: ", summarize=20)
-          weights = tf.cumprod(weights, axis=2)
-          # weights = tf.Print(weights, [tf.reduce_max(weights)], "max after: ")
-          # weights = tf.Print(weights, [tf.reduce_min(weights)], "min after: ")
-
-          # weights = tf.Print(weights, [weights[0][0][1:]], "before sub: ", summarize=20)
+          weights = safe_cumprod(weights, axis=2)
           weights = weights[:, :, :, 1:] - weights[:, :, :, :-1]
           weights = weights[:, :, 1:, :]
-          # weights = tf.Print(weights, [weights[0][0]], "after sub: ", summarize=20)
-
-          # weights = tf.nn.softmax(weights + 1)
 
         if self.monotonic and not self.train:
           # TODO: implement
