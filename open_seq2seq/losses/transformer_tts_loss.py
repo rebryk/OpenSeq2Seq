@@ -29,7 +29,8 @@ class TransformerTTSLoss(Loss):
     return {
         "use_mask": bool,
         "scale": float,
-        "stop_token_weight": float
+        "stop_token_weight": float,
+        "mag_weight": float
     }
 
   def _compute_loss(self, input_dict):
@@ -151,7 +152,8 @@ class TransformerTTSLoss(Loss):
     loss = decoder_loss + post_net_loss + stop_token_weight * stop_token_loss
 
     if self._both:
-      loss += mag_loss
+      mag_weight = self.params.get("mag_weight", 1.0)
+      loss += mag_weight * mag_loss
 
     if self.params.get("scale", None):
       loss = loss * self.params["scale"]
