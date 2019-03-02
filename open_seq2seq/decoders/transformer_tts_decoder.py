@@ -72,7 +72,7 @@ class TransformerTTSDecoder(Decoder):
   def __init__(self, params, model, name="transformer_tts_decoder", mode="train"):
     super(TransformerTTSDecoder, self).__init__(params, model, name, mode)
 
-    self.decoders_count = self.params.get(["decoders_count"], 1)
+    self.decoders_count = self.params.get("decoders_count", 1)
 
     self.model = model
     self._mode = mode
