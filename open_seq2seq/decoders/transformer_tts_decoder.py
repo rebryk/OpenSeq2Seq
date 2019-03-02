@@ -32,8 +32,7 @@ class TransformerTTSDecoder(Decoder):
       "num_heads": int,
       "attention_dropout": float,
       "relu_dropout": float,
-      "filter_size": int,
-      "decoders_count": int
+      "filter_size": int
     })
 
   @staticmethod
@@ -63,7 +62,8 @@ class TransformerTTSDecoder(Decoder):
       "prenet_activation": None,
       "parallel_iterations": int,
       "window_size": int,
-      "monotonic": bool
+      "monotonic": bool,
+      "decoders_count": int
     })
 
   def _cast_types(self, input_dict):
@@ -72,7 +72,7 @@ class TransformerTTSDecoder(Decoder):
   def __init__(self, params, model, name="transformer_tts_decoder", mode="train"):
     super(TransformerTTSDecoder, self).__init__(params, model, name, mode)
 
-    self.decoders_count = self.params["decoders_count"]
+    self.decoders_count = self.params.get(["decoders_count"], 1)
 
     self.model = model
     self._mode = mode
