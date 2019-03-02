@@ -209,6 +209,33 @@ class Text2Speech(EncoderDecoderModel):
     super(Text2Speech, self).__init__(params, mode=mode, hvd=hvd)
     self._save_to_tensorboard = self.params["save_to_tensorboard"]
 
+  def _get_alignments(self, attention_mask, modes, sample_index=0, max_heads=3):
+    alignments_name = ["enc_self_alignment", "dec_self_alignment", "dec_encdec_alignment"]
+
+    specs = []
+    titles = []
+
+    for name, alignment in zip(alignments_name, attention_mask):
+      n_layers = alignment.shape[0]
+      layers = []
+
+      if "all" in modes:
+        layers = list(range(n_layers))
+      else:
+        if "first" in modes:
+          layers.append(0)
+
+        if "last" in modes:
+          if n_layers > 1 or len(layers) == 0:
+            layers.append(n_layers - 1)
+
+      for layer in layers:
+        for head in range(alignment.shape[2])[:max_heads]:
+          specs.append(alignment[layer][sample_index][head])
+          titles.append("{}_layer_{}_head_{}".format(name, layer, head))
+
+    return specs, titles
+
   def maybe_print_logs(self, input_values, output_values, training_step):
     dict_to_log = {}
     step = training_step
@@ -236,16 +263,9 @@ class Text2Speech(EncoderDecoderModel):
         "post net results"
     ]
 
-    alignments_name = ["enc_self_alignment", "dec_self_alignment", "dec_encdec_alignment"]
-
-    for name, alignment in zip(alignments_name, attention_mask):
-      n_layers = alignment.shape[0]
-      layers = [0] + ([n_layers - 1] if n_layers > 1 else [])
-
-      for layer in layers:
-        for head in range(alignment.shape[2])[:3]:
-          specs.append(alignment[layer][0][head])
-          titles.append("{}_layer_{}_head_{}".format(name, layer, head))
+    alignment_specs, alignment_titles = self._get_alignments(attention_mask, ["first", "last"])
+    specs += alignment_specs
+    titles += alignment_titles
 
     if "both" in self.get_data_layer().params['output_type']:
       specs.append(output_values[5][0])
@@ -370,6 +390,10 @@ class Text2Speech(EncoderDecoderModel):
         # "alignments"
     ]
 
+    alignment_specs, alignment_titles = self._get_alignments(attention_mask, ["first", "last"])
+    specs += alignment_specs
+    titles += alignment_titles
+
     if "both" in self.get_data_layer().params['output_type']:
       n_feats = self.get_data_layer().params['num_audio_features']
       mag_pred = output_values[5]
@@ -451,10 +475,15 @@ class Text2Speech(EncoderDecoderModel):
     # Need to reduce amount of data sent for horovod
     # Use last element
     idx = -1
-    output_values = [item[idx] for item in output_values]
+
+    alignments = output_values[2]
+    output_values = [(item[idx]) for item in output_values]
+    output_values[2] = alignments
+    
     input_values = {
         key: [value[0][idx], value[1][idx]] for key, value in input_values.items()
     }
+
     return [input_values, output_values]
 
   def infer(self, input_values, output_values):

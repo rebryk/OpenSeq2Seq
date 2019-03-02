@@ -1,7 +1,6 @@
 # This code is heavily based on the code from MLPerf
 # https://github.com/mlperf/reference/tree/master/translation/tensorflow/transformer
 
-import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import math_ops
@@ -14,6 +13,8 @@ from .decoder import Decoder
 
 
 class TransformerTTSDecoder(Decoder):
+  _last_id = 0
+
   @staticmethod
   def get_required_params():
     """Static method with description of required parameters.
@@ -31,7 +32,8 @@ class TransformerTTSDecoder(Decoder):
       "num_heads": int,
       "attention_dropout": float,
       "relu_dropout": float,
-      "filter_size": int
+      "filter_size": int,
+      "decoders_count": int
     })
 
   @staticmethod
@@ -69,6 +71,8 @@ class TransformerTTSDecoder(Decoder):
 
   def __init__(self, params, model, name="transformer_tts_decoder", mode="train"):
     super(TransformerTTSDecoder, self).__init__(params, model, name, mode)
+
+    self.decoders_count = self.params["decoders_count"]
 
     self.model = model
     self._mode = mode
@@ -145,45 +149,9 @@ class TransformerTTSDecoder(Decoder):
       attention_bias=enc_dec_attention_bias,
     )
 
-    if self.mode == 'train':
-      alignments = []
-
-      enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
-      attention_weights = []
-
-      layer = 0
-      while True:
-        try:
-          attention_weights_op = tf.get_default_graph().get_operation_by_name(enc_op.format(layer))
-          attention_weights.append(attention_weights_op.values()[0])
-          layer += 1
-        except:
-          break
-
-      alignments.append(tf.stack(attention_weights))
-
-      ops = [
-        "ForwardPass/transformer_tts_decoder/layer_{}/self_attention/self_attention/attention_weights",
-        "ForwardPass/transformer_tts_decoder/layer_{}/encdec_attention/attention/attention_weights"
-      ]
-
-      for op in ops:
-        attention_weights = []
-
-        for layer in range(self.params["num_hidden_layers"]):
-          attention_weights_op = tf.get_default_graph().get_operation_by_name(op.format(layer))
-          attention_weights.append(attention_weights_op.values()[0])
-
-        alignments.append(tf.stack(attention_weights))
-    else:
-      # TODO: get name
-      # dec_self_op = 'ForwardPass_2/transformer_tts_decoder/while/layer_{}/self_attention/self_attention/attention_weights'
-      # dec_encdec_op = 'ForwardPass_3/transformer_tts_decoder/while/layer_{}/encdec_attention/attention/attention_weights'
-
-      alignments = []
-
-      for _ in range(3):
-        alignments.append(tf.zeros([batch_size, batch_size, batch_size, batch_size, batch_size]))
+    alignments = []
+    for _ in range(3):
+      alignments.append(tf.zeros([batch_size, batch_size, batch_size, batch_size, batch_size]))
 
     decoder_spec_output = self.output_projection_layer(decoder_output)
     stop_token_logits = self.stop_token_projection_layer(decoder_spec_output)
@@ -273,6 +241,29 @@ class TransformerTTSDecoder(Decoder):
 
     return self._train(targets, encoder_outputs, inputs_attention_bias, spec_length)
 
+  def _get_layers_count(self, operation_name):
+    n_layers = 0
+
+    while True:
+      try:
+        tf.get_default_graph().get_operation_by_name(operation_name.format(n_layers))
+        n_layers += 1
+      except:
+        return n_layers
+
+  def _get_weights(self, operation_name):
+    n_layers = self._get_layers_count(operation_name)
+
+    print("Found {} layers for {}".format(n_layers, operation_name))
+
+    weights = []
+
+    for layer in range(n_layers):
+      weights_operation = tf.get_default_graph().get_operation_by_name(operation_name.format(layer))
+      weights.append(weights_operation.values()[0])
+
+    return tf.stack(weights)
+
   def _train(self, targets, encoder_outputs, encoder_decoder_attention_bias, sequence_lengths):
     # TODO: verify that it works properly
     # Shift targets to the right, and remove the last element
@@ -285,6 +276,17 @@ class TransformerTTSDecoder(Decoder):
       encoder_decoder_attention_bias,
       sequence_lengths
     )
+
+    # Get encoder self-attention, decoder self-attention, encoder-decoder attention alignments
+    # [n_alignments, n_layers, batch, n_heads, audio_len, text_len]
+    alignments = []
+    enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
+    dec_op = "ForwardPass/transformer_tts_decoder/layer_{}/self_attention/self_attention/attention_weights"
+    enc_dec_op = "ForwardPass/transformer_tts_decoder/layer_{}/encdec_attention/attention/attention_weights"
+    alignments.append(self._get_weights(enc_op))
+    alignments.append(self._get_weights(dec_op))
+    alignments.append(self._get_weights(enc_dec_op))
+    outputs["alignments"] = alignments
 
     return self._convert_outputs(outputs)
 
@@ -391,6 +393,19 @@ class TransformerTTSDecoder(Decoder):
     stop_token_logits = tf.concat([state["outputs"]["stop_token_logits"], stop_token_logits], 1)
     outputs["stop_token_logits"] = stop_token_logits
 
+    # Get encoder self-attention, decoder self-attention, encoder-decoder attention alignments
+    alignments = []
+    enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
+    forward = 'ForwardPass_' + str(self.decoders_count + self._last_id)
+    self._last_id += 1
+    dec_op = forward + '/transformer_tts_decoder/while/layer_{}/self_attention/self_attention/attention_weights'
+    enc_dec_op = forward + '/transformer_tts_decoder/while/layer_{}/encdec_attention/attention/attention_weights'
+
+    alignments.append(self._get_weights(enc_op))
+    alignments.append(self._get_weights(dec_op))
+    alignments.append(self._get_weights(enc_dec_op))
+    outputs["alignments"] = alignments
+
     state["iteration"] = state["iteration"] + 1
     state["inputs"] = next_inputs
     state["finished"] = finished
@@ -414,7 +429,7 @@ class TransformerTTSDecoder(Decoder):
       shape_invariants=state_shape_invariants,
       back_prop=False,
       maximum_iterations=maximum_iterations,
-      parallel_iterations=self.params.get("parallel_iterations", 32)
+      parallel_iterations=self.params.get("parallel_iterations", 1)
     )
 
     return self._convert_outputs(state["outputs"])
