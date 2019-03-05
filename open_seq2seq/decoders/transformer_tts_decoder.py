@@ -131,12 +131,9 @@ class TransformerTTSDecoder(Decoder):
     features_count = tf.shape(decoder_inputs)[2]
 
     with tf.name_scope("add_pos_encoding"):
-      features_count_even = features_count if features_count % 2 == 0 else features_count + 1
+      features_count_even = features_count if (features_count % 2 == 0) else (features_count + 1)
       position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), self.params["dtype"])
-
-      if features_count % 2 == 1:
-        position_encoding = position_encoding[:, :-1]
-
+      position_encoding = position_encoding[:, :features_count]
       decoder_inputs += position_encoding
 
     decoder_inputs = self.prenet(decoder_inputs)
