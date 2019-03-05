@@ -63,7 +63,8 @@ class TransformerTTSDecoder(Decoder):
       "parallel_iterations": int,
       "window_size": int,
       "monotonic": bool,
-      "decoders_count": int
+      "decoders_count": int,
+      "reduction_factor": int
     })
 
   def _cast_types(self, input_dict):
@@ -97,7 +98,7 @@ class TransformerTTSDecoder(Decoder):
       raise ValueError("You should use post-net!")
 
     self.features_count = sum(self.n_feats.values()) if self.both else self.n_feats
-
+    self.reduction_factor = self.params.get("reduction_factor", 1)
     self.regularizer = self.params.get("regularizer", None)
 
     self.prenet = None
@@ -127,11 +128,13 @@ class TransformerTTSDecoder(Decoder):
   def decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
     batch_size = tf.shape(decoder_inputs)[0]
     length = tf.shape(decoder_inputs)[1]
+    features_count = tf.shape(decoder_inputs)[2]
 
     with tf.name_scope("add_pos_encoding"):
-      position_encoding = tf.cast(utils.get_position_encoding(length, self.features_count + 1), self.params["dtype"])
+      features_count_even = features_count if features_count % 2 == 0 else features_count + 1
+      position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), self.params["dtype"])
 
-      if self.features_count % 2 == 1:
+      if features_count % 2 == 1:
         position_encoding = position_encoding[:, :-1]
 
       decoder_inputs += position_encoding
@@ -160,7 +163,7 @@ class TransformerTTSDecoder(Decoder):
     if self.mag_spec_postnet:
       mag_spec_prediction = self.mag_spec_postnet(spectrogram_prediction)
     else:
-      mag_spec_prediction = tf.zeros([batch_size, batch_size, batch_size])
+      mag_spec_prediction = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
 
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
@@ -213,7 +216,7 @@ class TransformerTTSDecoder(Decoder):
     # The same decoder post-net is used in Tacotron2
     self.postnet = Postnet(
       conv_layers=self.params["postnet_conv_layers"],
-      num_audio_features=num_audio_features,
+      num_audio_features=num_audio_features * self.reduction_factor,
       dropout_keep_prob=self.params.get("postnet_keep_dropout_prob", 0.5),
       regularizer=self.params.get("regularizer", None),
       training=self.training,
@@ -222,13 +225,13 @@ class TransformerTTSDecoder(Decoder):
       bn_epsilon=self.params.get("postnet_bn_epsilon", 1e-5)
     )
 
-    self.output_projection_layer = tf.layers.Dense(name="output_proj", units=num_audio_features, use_bias=True)
-    self.stop_token_projection_layer = tf.layers.Dense(name="stop_token_proj", units=1, use_bias=True)
+    self.output_projection_layer = tf.layers.Dense(name="output_proj", units=num_audio_features * self.reduction_factor, use_bias=True)
+    self.stop_token_projection_layer = tf.layers.Dense(name="stop_token_proj", units=1 * self.reduction_factor, use_bias=True)
 
     if self.both:
       self.mag_spec_postnet = MagSpecPostnet(
         self.params,
-        self.n_feats["magnitude"],
+        self.n_feats["magnitude"] * self.reduction_factor,
         self.model.get_data_layer()._exp_mag,
         self.training
       )
@@ -265,9 +268,9 @@ class TransformerTTSDecoder(Decoder):
     return tf.stack(weights)
 
   def _train(self, targets, encoder_outputs, encoder_decoder_attention_bias, sequence_lengths):
-    # TODO: verify that it works properly
     # Shift targets to the right, and remove the last element
     with tf.name_scope("shift_targets"):
+      targets = self._collapse(targets, self.features_count)
       decoder_inputs = tf.pad(targets, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
 
     outputs = self.decode_pass(
@@ -288,29 +291,44 @@ class TransformerTTSDecoder(Decoder):
     alignments.append(self._get_weights(enc_dec_op))
     outputs["alignments"] = alignments
 
+    for key in ["spec", "post_net_spec", "stop_token_logits", "mag_spec"]:
+      outputs[key] = self._extend(outputs[key])
+
     return self._convert_outputs(outputs)
+
+  def _collapse(self, values, last_dim):
+    shape = tf.shape(values)
+    values = tf.reshape(values, [shape[0], shape[1] // self.reduction_factor, last_dim * self.reduction_factor])
+    return values
+
+  def _extend(self, values):
+    shape = tf.shape(values)
+    values = tf.reshape(values, [shape[0], shape[1] * self.reduction_factor, shape[2] // self.reduction_factor])
+    return values
 
   def _inference_initial_state(self, encoder_outputs, encoder_decoder_attention_bias):
     # TODO: change channel size
     # TODO: make mag spec optional
 
     batch_size = tf.shape(encoder_outputs)[0]
+    num_mel_features = self.n_feats["mel"] if self.both else self.n_feats
+    num_mag_features = self.n_feats["magnitude"] if self.both else batch_size
 
     state = {
       "iteration": tf.constant(0),
-      "inputs": tf.zeros([batch_size, 1, self.features_count]),
+      "inputs": tf.zeros([batch_size, 1, self.features_count * self.reduction_factor]),
       "finished": tf.cast(tf.zeros([batch_size]), tf.bool),
       "outputs": {
-        "spec": tf.zeros([batch_size, 0, 80]),
-        "post_net_spec": tf.zeros([batch_size, 0, 80]),
+        "spec": tf.zeros([batch_size, 0, num_mel_features * self.reduction_factor]),
+        "post_net_spec": tf.zeros([batch_size, 0, num_mel_features * self.reduction_factor]),
         "alignments": [
           tf.zeros([0, 0, 0, 0, 0]),
           tf.zeros([0, 0, 0, 0, 0]),
           tf.zeros([0, 0, 0, 0, 0])
         ],
-        "stop_token_logits": tf.zeros([batch_size, 0, 1]),
+        "stop_token_logits": tf.zeros([batch_size, 0, 1 * self.reduction_factor]),
         "lengths": tf.zeros([batch_size], dtype=tf.int32),
-        "mag_spec": tf.zeros([batch_size, 0, 513]) if self.both else tf.zeros([batch_size, 0, batch_size])
+        "mag_spec": tf.zeros([batch_size, 0, num_mag_features * self.reduction_factor])
       },
       "encoder_outputs": encoder_outputs,
       "encoder_decoder_attention_bias": encoder_decoder_attention_bias
@@ -318,17 +336,17 @@ class TransformerTTSDecoder(Decoder):
 
     state_shape_invariants = {
       "iteration": tf.TensorShape([]),
-      "inputs": tf.TensorShape([None, None, self.features_count]),
+      "inputs": tf.TensorShape([None, None, self.features_count * self.reduction_factor]),
       "finished": tf.TensorShape([None]),
       "outputs": {
-        "spec": tf.TensorShape([None, None, 80]),
-        "post_net_spec": tf.TensorShape([None, None, 80]),
+        "spec": tf.TensorShape([None, None, num_mel_features * self.reduction_factor]),
+        "post_net_spec": tf.TensorShape([None, None, num_mel_features * self.reduction_factor]),
         "alignments": [
           tf.TensorShape([None, None, None, None, None]),
           tf.TensorShape([None, None, None, None, None]),
           tf.TensorShape([None, None, None, None, None])
         ],
-        "stop_token_logits": tf.TensorShape([None, None, 1]),
+        "stop_token_logits": tf.TensorShape([None, None, 1 * self.reduction_factor]),
         "lengths": tf.TensorShape([None]),
         "mag_spec": tf.TensorShape([None, None, None])
       },
@@ -354,13 +372,16 @@ class TransformerTTSDecoder(Decoder):
       encoder_decoder_attention_bias
     )
 
-    spectrogram_prediction = outputs["post_net_spec"][:, -1:, :]
+    mel_spec_prediction = outputs["post_net_spec"][:, -1:, :]
     mag_spec_prediction = outputs["mag_spec"][:, -1:, :]
 
     if self.both:
-      next_inputs = tf.concat([spectrogram_prediction, mag_spec_prediction], -1)
+      mel_spec_prediction = self._extend(mel_spec_prediction)
+      mag_spec_prediction = self._extend(mag_spec_prediction)
+      next_inputs = tf.concat([mel_spec_prediction, mag_spec_prediction], -1)
+      next_inputs = self._collapse(next_inputs, self.features_count)
     else:
-      next_inputs = spectrogram_prediction
+      next_inputs = mel_spec_prediction
 
     # Set zero if sequence is finished
     next_inputs = tf.where(state["finished"], tf.zeros_like(next_inputs), next_inputs)
@@ -368,7 +389,7 @@ class TransformerTTSDecoder(Decoder):
 
     # Update lengths
     lengths = state["outputs"]["lengths"]
-    lengths = tf.where(state["finished"], lengths, lengths + 1)
+    lengths = tf.where(state["finished"], lengths, lengths + 1 * self.reduction_factor)
     outputs["lengths"] = lengths
 
     # Update spec, post_net_spec and mag_spec
@@ -385,6 +406,7 @@ class TransformerTTSDecoder(Decoder):
       stop_token_logits
     )
     stop_prediction = tf.sigmoid(stop_token_logits)
+    stop_prediction = tf.reduce_max(stop_prediction, axis=-1)
 
     # TODO: uncomment next line if you want to use stop token predictions
     # finished = tf.reshape(tf.cast(tf.round(stop_prediction), tf.bool), [-1])
@@ -420,6 +442,8 @@ class TransformerTTSDecoder(Decoder):
     else:
       maximum_iterations = tf.reduce_max(sequence_lengths)
 
+    maximum_iterations //= self.reduction_factor
+
     state, state_shape_invariants = self._inference_initial_state(encoder_outputs, encoder_decoder_attention_bias)
 
     state = tf.while_loop(
@@ -432,5 +456,10 @@ class TransformerTTSDecoder(Decoder):
       parallel_iterations=self.params.get("parallel_iterations", 1)
     )
 
-    return self._convert_outputs(state["outputs"])
+    outputs = state["outputs"]
+
+    for key in ["spec", "post_net_spec", "stop_token_logits", "mag_spec"]:
+      outputs[key] = self._extend(outputs[key])
+
+    return self._convert_outputs(outputs)
 
