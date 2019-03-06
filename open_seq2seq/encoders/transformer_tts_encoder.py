@@ -208,10 +208,11 @@ class TransformerTTSEncoder(Encoder):
       inputs_attention_bias = utils.get_padding_bias(inputs)
       self_attention_bias = inputs_attention_bias
 
-      with tf.name_scope("add_pos_encoding"):
-        length = tf.shape(prenet_inputs)[1]
-        pos_encoding = utils.get_position_encoding(length, self.params["hidden_size"])
-        encoder_inputs = prenet_inputs + tf.cast(x=pos_encoding, dtype=prenet_inputs.dtype)
+      # with tf.name_scope("add_pos_encoding"):
+      #   length = tf.shape(prenet_inputs)[1]
+      #   pos_encoding = utils.get_position_encoding(length, self.params["hidden_size"])
+      #   encoder_inputs = prenet_inputs + tf.cast(x=pos_encoding, dtype=prenet_inputs.dtype)
+      encoder_inputs = prenet_inputs
 
       if self.mode == "train":
         encoder_inputs = tf.nn.dropout(encoder_inputs, keep_prob=1.0 - self.params["layer_postprocess_dropout"])
