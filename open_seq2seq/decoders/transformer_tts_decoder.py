@@ -128,6 +128,8 @@ class TransformerTTSDecoder(Decoder):
   def decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
     batch_size = tf.shape(decoder_inputs)[0]
     length = tf.shape(decoder_inputs)[1]
+
+    decoder_inputs = self.prenet(decoder_inputs)
     features_count = tf.shape(decoder_inputs)[2]
 
     with tf.name_scope("add_pos_encoding"):
@@ -135,8 +137,6 @@ class TransformerTTSDecoder(Decoder):
       position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), self.params["dtype"])
       position_encoding = position_encoding[:, :features_count]
       decoder_inputs += position_encoding
-
-    decoder_inputs = self.prenet(decoder_inputs)
 
     length = tf.shape(decoder_inputs)[1]
     window_size = self.params.get("window_size", -1)
