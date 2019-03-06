@@ -196,9 +196,10 @@ class TransformerTTSEncoder(Encoder):
 
       # Prepare inputs to the layer stack by adding positional encodings and
       # applying dropout.
-
       embedded_inputs = self.embedding_softmax_layer(inputs)
-      prenet_inputs = self.prenet(embedded_inputs, text_len)
+      prenet_outputs = self.prenet(embedded_inputs, text_len)
+      linear_projection = tf.layers.Dense(name="linear_projection", units=self.params["hidden_size"])
+      prenet_outputs = linear_projection(prenet_outputs)
 
       if self.params["remove_padding"]:
         inputs_padding = utils.get_padding(inputs)
@@ -208,17 +209,13 @@ class TransformerTTSEncoder(Encoder):
       inputs_attention_bias = utils.get_padding_bias(inputs)
       self_attention_bias = inputs_attention_bias
 
-      # with tf.name_scope("add_pos_encoding"):
-      #   length = tf.shape(prenet_inputs)[1]
-      #   pos_encoding = utils.get_position_encoding(length, self.params["hidden_size"])
-      #   encoder_inputs = prenet_inputs + tf.cast(x=pos_encoding, dtype=prenet_inputs.dtype)
-      encoder_inputs = prenet_inputs
+      with tf.name_scope("add_pos_encoding"):
+        length = tf.shape(prenet_outputs)[1]
+        pos_encoding = utils.get_position_encoding(length, self.params["hidden_size"])
+        encoder_inputs = prenet_outputs + tf.cast(x=pos_encoding, dtype=prenet_outputs.dtype)
 
       if self.mode == "train":
         encoder_inputs = tf.nn.dropout(encoder_inputs, keep_prob=1.0 - self.params["layer_postprocess_dropout"])
-
-      linear_projection = tf.layers.Dense(name="linear_projection", units=self.params["hidden_size"])
-      encoder_inputs = linear_projection(encoder_inputs)
 
       length = tf.shape(encoder_inputs)[1]
       window_size = self.params.get("window_size", -1)

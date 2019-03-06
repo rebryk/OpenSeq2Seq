@@ -128,16 +128,19 @@ class TransformerTTSDecoder(Decoder):
   def decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
     batch_size = tf.shape(decoder_inputs)[0]
     length = tf.shape(decoder_inputs)[1]
-    features_count = tf.shape(decoder_inputs)[2]
-
-    # with tf.name_scope("add_pos_encoding"):
-    #   features_count_even = features_count if (features_count % 2 == 0) else (features_count + 1)
-    #   position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), self.params["dtype"])
-    #   position_encoding = position_encoding[:, :features_count]
-    #   decoder_inputs += position_encoding
 
     decoder_inputs = self.prenet(decoder_inputs)
-    
+    linear_projection = tf.layers.Dense(name="linear_projection", units=self.params["hidden_size"])
+    decoder_inputs = linear_projection(decoder_inputs)
+
+    features_count = tf.shape(decoder_inputs)[2]
+
+    with tf.name_scope("add_pos_encoding"):
+      features_count_even = features_count if (features_count % 2 == 0) else (features_count + 1)
+      position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), self.params["dtype"])
+      position_encoding = position_encoding[:, :features_count]
+      decoder_inputs += position_encoding
+
     length = tf.shape(decoder_inputs)[1]
     window_size = self.params.get("window_size", -1)
     decoder_self_attention_bias = get_window_attention_bias(length, window_size, causal=True)
