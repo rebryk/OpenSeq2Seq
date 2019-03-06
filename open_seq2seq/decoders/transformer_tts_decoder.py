@@ -174,11 +174,13 @@ class TransformerTTSDecoder(Decoder):
         "mag_spec": mag_spec_prediction
     }
 
-  @staticmethod
-  def _convert_outputs(outputs):
+  def _convert_outputs(self, outputs):
+    batch_size = self.model.params["batch_size_per_gpu"]
+    alignments = [[outputs["alignments"][it][:, sample, :, :, :] for it in range(3)] for sample in range(batch_size)]
+
     return {
       "outputs": [
-        outputs["spec"], outputs["post_net_spec"], outputs["alignments"],
+        outputs["spec"], outputs["post_net_spec"], alignments,
         tf.sigmoid(outputs["stop_token_logits"]), outputs["lengths"], outputs["mag_spec"]
       ],
       "stop_token_logits": outputs["stop_token_logits"]
@@ -304,9 +306,6 @@ class TransformerTTSDecoder(Decoder):
     return values
 
   def _inference_initial_state(self, encoder_outputs, encoder_decoder_attention_bias):
-    # TODO: change channel size
-    # TODO: make mag spec optional
-
     batch_size = tf.shape(encoder_outputs)[0]
     num_mel_features = self.n_feats["mel"] if self.both else self.n_feats
     num_mag_features = self.n_feats["magnitude"] if self.both else batch_size
@@ -415,8 +414,14 @@ class TransformerTTSDecoder(Decoder):
     # Get encoder self-attention, decoder self-attention, encoder-decoder attention alignments
     alignments = []
     enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
-    forward = 'ForwardPass_' + str(self.decoders_count + self._last_id)
-    self._last_id += 1
+
+    if self.mode == 'infer':
+      # Single GPU!
+      forward = 'ForwardPass'
+    else:
+      forward = 'ForwardPass_' + str(self.decoders_count + self._last_id)
+      self._last_id += 1
+
     dec_op = forward + '/transformer_tts_decoder/while/layer_{}/self_attention/self_attention/attention_weights'
     enc_dec_op = forward + '/transformer_tts_decoder/while/layer_{}/encdec_attention/attention/attention_weights'
 

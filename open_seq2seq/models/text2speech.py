@@ -209,14 +209,14 @@ class Text2Speech(EncoderDecoderModel):
     super(Text2Speech, self).__init__(params, mode=mode, hvd=hvd)
     self._save_to_tensorboard = self.params["save_to_tensorboard"]
 
-  def _get_alignments(self, attention_mask, modes, sample_index=0, max_heads=3):
+  def _get_alignments(self, attention_mask, modes, max_heads=3):
     alignments_name = ["enc_self_alignment", "dec_self_alignment", "dec_encdec_alignment"]
 
     specs = []
     titles = []
 
     for name, alignment in zip(alignments_name, attention_mask):
-      n_layers = alignment.shape[0]
+      n_layers = len(alignment)
       layers = []
 
       if "all" in modes:
@@ -230,8 +230,8 @@ class Text2Speech(EncoderDecoderModel):
             layers.append(n_layers - 1)
 
       for layer in layers:
-        for head in range(alignment.shape[2])[:max_heads]:
-          specs.append(alignment[layer][sample_index][head])
+        for head in range(alignment.shape[1])[:max_heads]:
+          specs.append(alignment[layer][head])
           titles.append("{}_layer_{}_head_{}".format(name, layer, head))
 
     return specs, titles
@@ -248,6 +248,7 @@ class Text2Speech(EncoderDecoderModel):
     stop_target = stop_target[0]
     predicted_spec = predicted_decoder_spec[0]
     predicted_final_spec = predicted_final_spec[0]
+    alignment = attention_mask[0]
     stop_token_pred = stop_token_pred[0]
     audio_length = output_values[4][0]
 
@@ -263,7 +264,7 @@ class Text2Speech(EncoderDecoderModel):
         "post net results"
     ]
 
-    alignment_specs, alignment_titles = self._get_alignments(attention_mask, ["first", "last"])
+    alignment_specs, alignment_titles = self._get_alignments(alignment, ["first", "last"])
     specs += alignment_specs
     titles += alignment_titles
 
@@ -380,14 +381,12 @@ class Text2Speech(EncoderDecoderModel):
     specs = [
         y_sample,
         predicted_spec,
-        predicted_final_spec,
-        # attention_mask
+        predicted_final_spec
     ]
     titles = [
         "training data",
         "decoder results",
-        "post net results",
-        # "alignments"
+        "post net results"
     ]
 
     alignment_specs, alignment_titles = self._get_alignments(attention_mask, ["first", "last"])
@@ -475,15 +474,10 @@ class Text2Speech(EncoderDecoderModel):
     # Need to reduce amount of data sent for horovod
     # Use last element
     idx = -1
-
-    alignments = output_values[2]
     output_values = [(item[idx]) for item in output_values]
-    output_values[2] = alignments
-    
     input_values = {
         key: [value[0][idx], value[1][idx]] for key, value in input_values.items()
     }
-
     return [input_values, output_values]
 
   def infer(self, input_values, output_values):
@@ -492,8 +486,9 @@ class Text2Speech(EncoderDecoderModel):
     return [input_values, output_values]
 
   def finalize_inference(self, results_per_batch, output_file):
-    print("output_file is ignored for ts2")
+    print("output_file is ignored for tts")
     print("results are logged to the logdir")
+
     batch_size = len(results_per_batch[0][0]['source_tensors'][0])
     for i, sample in enumerate(results_per_batch):
       output_values = sample[1]
@@ -507,9 +502,13 @@ class Text2Speech(EncoderDecoderModel):
         attention_mask_sample = attention_mask[j]
         stop_tokens_sample = stop_tokens[j]
 
-        specs = [predicted_final_spec, attention_mask_sample]
-        titles = ["final spectrogram", "attention"]
+        specs = [predicted_final_spec]
+        titles = ["final spectrogram"]
         audio_length = sequence_lengths[j]
+
+        alignment_specs, alignment_titles = self._get_alignments(attention_mask_sample, ["first", "last"])
+        specs += alignment_specs
+        titles += alignment_titles
 
         if "mel" in self.get_data_layer().params['output_type']:
           mag_spec = self.get_data_layer().get_magnitude_spec(predicted_final_spec)
