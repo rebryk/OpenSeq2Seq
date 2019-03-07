@@ -8,7 +8,7 @@ from tensorflow.python.ops import math_ops
 from open_seq2seq.decoders.tacotron2_decoder import Prenet
 from open_seq2seq.parts.transformer import utils
 from open_seq2seq.parts.transformer_tts import TransformerDecoder, Postnet, MagSpecPostnet
-from open_seq2seq.parts.transformer_tts.utils import get_window_attention_bias, NEG_INF
+from open_seq2seq.parts.transformer_tts.utils import get_window_attention_bias
 from .decoder import Decoder
 
 
