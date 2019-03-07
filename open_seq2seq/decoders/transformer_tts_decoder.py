@@ -272,7 +272,9 @@ class TransformerTTSDecoder(Decoder):
   def _train(self, targets, encoder_outputs, encoder_decoder_attention_bias, sequence_lengths):
     # Shift targets to the right, and remove the last element
     with tf.name_scope("shift_targets"):
-      targets = self._collapse(targets, self.features_count)
+      num_audio_features = self.n_feats["mel"] if self.both else self.n_feats
+      targets = targets[:, :, :num_audio_features]
+      targets = self._collapse(targets, num_audio_features)
       decoder_inputs = tf.pad(targets, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
 
     outputs = self.decode_pass(
@@ -313,9 +315,11 @@ class TransformerTTSDecoder(Decoder):
     num_mel_features = self.n_feats["mel"] if self.both else self.n_feats
     num_mag_features = self.n_feats["magnitude"] if self.both else batch_size
 
+    num_audio_features = self.n_feats["mel"] if self.both else self.n_feats
+
     state = {
       "iteration": tf.constant(0),
-      "inputs": tf.zeros([batch_size, 1, self.features_count * self.reduction_factor]),
+      "inputs": tf.zeros([batch_size, 1, num_audio_features * self.reduction_factor]),
       "finished": tf.cast(tf.zeros([batch_size]), tf.bool),
       "outputs": {
         "spec": tf.zeros([batch_size, 0, num_mel_features * self.reduction_factor]),
@@ -335,7 +339,7 @@ class TransformerTTSDecoder(Decoder):
 
     state_shape_invariants = {
       "iteration": tf.TensorShape([]),
-      "inputs": tf.TensorShape([None, None, self.features_count * self.reduction_factor]),
+      "inputs": tf.TensorShape([None, None, num_audio_features * self.reduction_factor]),
       "finished": tf.TensorShape([None]),
       "outputs": {
         "spec": tf.TensorShape([None, None, num_mel_features * self.reduction_factor]),
@@ -360,8 +364,8 @@ class TransformerTTSDecoder(Decoder):
     return tf.logical_not(all_finished)
 
   def _inference_step(self, state):
-    # TODO: calculate alignments
     inputs = state["inputs"]
+
     encoder_outputs = state["encoder_outputs"]
     encoder_decoder_attention_bias = state["encoder_decoder_attention_bias"]
 
@@ -372,15 +376,15 @@ class TransformerTTSDecoder(Decoder):
     )
 
     mel_spec_prediction = outputs["post_net_spec"][:, -1:, :]
-    mag_spec_prediction = outputs["mag_spec"][:, -1:, :]
+    # mag_spec_prediction = outputs["mag_spec"][:, -1:, :]
 
-    if self.both:
-      mel_spec_prediction = self._extend(mel_spec_prediction)
-      mag_spec_prediction = self._extend(mag_spec_prediction)
-      next_inputs = tf.concat([mel_spec_prediction, mag_spec_prediction], -1)
-      next_inputs = self._collapse(next_inputs, self.features_count)
-    else:
-      next_inputs = mel_spec_prediction
+    # if self.both:
+    #   mel_spec_prediction = self._extend(mel_spec_prediction)
+    #   mag_spec_prediction = self._extend(mag_spec_prediction)
+    #   next_inputs = tf.concat([mel_spec_prediction, mag_spec_prediction], -1)
+    #   next_inputs = self._collapse(next_inputs, self.features_count)
+    # else:
+    next_inputs = mel_spec_prediction
 
     # Set zero if sequence is finished
     next_inputs = tf.where(state["finished"], tf.zeros_like(next_inputs), next_inputs)
