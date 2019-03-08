@@ -125,22 +125,25 @@ class TransformerTTSDecoder(Decoder):
     if self.params.get("enable_prenet", True):
       self.prenet.add_regularization(self.regularizer)
 
+  def _positional_encoding(self, x):
+    length = tf.shape(x)[1]
+    features_count = tf.shape(x)[2]
+    features_count_even = features_count if (features_count % 2 == 0) else (features_count + 1)
+    position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), self.params["dtype"])
+    position_encoding = position_encoding[:, :features_count]
+    return position_encoding
+
   def decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
-    batch_size = tf.shape(decoder_inputs)[0]
-    length = tf.shape(decoder_inputs)[1]
-
     decoder_inputs = self.prenet(decoder_inputs)
-    linear_projection = tf.layers.Dense(name="linear_projection", units=self.params["hidden_size"])
-    decoder_inputs = linear_projection(decoder_inputs)
+    decoder_inputs = self.linear_projection(decoder_inputs)
 
-    features_count = tf.shape(decoder_inputs)[2]
+    # with tf.name_scope("encoder_pos_encoding"):
+    #   encoder_outputs += self._positional_encoding(encoder_outputs)
 
-    with tf.name_scope("add_pos_encoding"):
-      features_count_even = features_count if (features_count % 2 == 0) else (features_count + 1)
-      position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), self.params["dtype"])
-      position_encoding = position_encoding[:, :features_count]
-      decoder_inputs += position_encoding
+    with tf.name_scope("decoder_pos_encoding"):
+      decoder_inputs += self._positional_encoding(decoder_inputs)
 
+    batch_size = tf.shape(decoder_inputs)[0]
     length = tf.shape(decoder_inputs)[1]
     window_size = self.params.get("window_size", -1)
     decoder_self_attention_bias = get_window_attention_bias(length, window_size, causal=True)
@@ -153,7 +156,7 @@ class TransformerTTSDecoder(Decoder):
     )
 
     alignments = []
-    for _ in range(3):
+    for _ in range(2):
       alignments.append(tf.zeros([batch_size, batch_size, batch_size, batch_size, batch_size]))
 
     decoder_spec_output = self.output_projection_layer(decoder_output)
@@ -179,7 +182,7 @@ class TransformerTTSDecoder(Decoder):
 
   def _convert_outputs(self, outputs):
     batch_size = self.model.params["batch_size_per_gpu"]
-    alignments = [[outputs["alignments"][it][:, sample, :, :, :] for it in range(3)] for sample in range(batch_size)]
+    alignments = [[outputs["alignments"][it][:, sample, :, :, :] for it in range(2)] for sample in range(batch_size)]
 
     return {
       "outputs": [
@@ -210,6 +213,12 @@ class TransformerTTSDecoder(Decoder):
       self.params.get("prenet_layers", 2),
       self.params.get("prenet_activation", tf.nn.relu),
       self.params["dtype"]
+    )
+
+    self.linear_projection = tf.layers.Dense(
+      name="linear_projection",
+      units=self.params["hidden_size"],
+      use_bias=False
     )
 
     monotonic = self.params.get("monotonic", False)
@@ -287,10 +296,10 @@ class TransformerTTSDecoder(Decoder):
     # Get encoder self-attention, decoder self-attention, encoder-decoder attention alignments
     # [n_alignments, n_layers, batch, n_heads, audio_len, text_len]
     alignments = []
-    enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
+    # enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
     dec_op = "ForwardPass/transformer_tts_decoder/layer_{}/self_attention/self_attention/attention_weights"
     enc_dec_op = "ForwardPass/transformer_tts_decoder/layer_{}/encdec_attention/attention/attention_weights"
-    alignments.append(self._get_weights(enc_op))
+    # alignments.append(self._get_weights(enc_op))
     alignments.append(self._get_weights(dec_op))
     alignments.append(self._get_weights(enc_dec_op))
     outputs["alignments"] = alignments
@@ -325,7 +334,7 @@ class TransformerTTSDecoder(Decoder):
         "spec": tf.zeros([batch_size, 0, num_mel_features * self.reduction_factor]),
         "post_net_spec": tf.zeros([batch_size, 0, num_mel_features * self.reduction_factor]),
         "alignments": [
-          tf.zeros([0, 0, 0, 0, 0]),
+          # tf.zeros([0, 0, 0, 0, 0]),
           tf.zeros([0, 0, 0, 0, 0]),
           tf.zeros([0, 0, 0, 0, 0])
         ],
@@ -345,7 +354,7 @@ class TransformerTTSDecoder(Decoder):
         "spec": tf.TensorShape([None, None, num_mel_features * self.reduction_factor]),
         "post_net_spec": tf.TensorShape([None, None, num_mel_features * self.reduction_factor]),
         "alignments": [
-          tf.TensorShape([None, None, None, None, None]),
+          # tf.TensorShape([None, None, None, None, None]),
           tf.TensorShape([None, None, None, None, None]),
           tf.TensorShape([None, None, None, None, None])
         ],
@@ -420,7 +429,7 @@ class TransformerTTSDecoder(Decoder):
 
     # Get encoder self-attention, decoder self-attention, encoder-decoder attention alignments
     alignments = []
-    enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
+    # enc_op = "ForwardPass/transformer_tts_encoder/encode/layer_{}/self_attention/self_attention/attention_weights"
 
     if self.mode == 'infer':
       # Single GPU!
@@ -432,7 +441,7 @@ class TransformerTTSDecoder(Decoder):
     dec_op = forward + '/transformer_tts_decoder/while/layer_{}/self_attention/self_attention/attention_weights'
     enc_dec_op = forward + '/transformer_tts_decoder/while/layer_{}/encdec_attention/attention/attention_weights'
 
-    alignments.append(self._get_weights(enc_op))
+    # alignments.append(self._get_weights(enc_op))
     alignments.append(self._get_weights(dec_op))
     alignments.append(self._get_weights(enc_dec_op))
     outputs["alignments"] = alignments

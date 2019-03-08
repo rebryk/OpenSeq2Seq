@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from open_seq2seq.data import Text2SpeechDataLayer
 from open_seq2seq.decoders import TransformerTTSDecoder
-from open_seq2seq.encoders import TransformerTTSEncoder
+from open_seq2seq.encoders import ConvTTSEncoder, TransformerTTSEncoder
 from open_seq2seq.losses import TransformerTTSLoss
 from open_seq2seq.models import Text2Speech
 from open_seq2seq.optimizers.lr_policies import exp_decay
@@ -14,19 +14,19 @@ base_model = Text2Speech
 
 dataset = "LJ"
 dataset_location = "/data/LJSpeech"
-output_type = "both"
+output_type = "mel"
 
 if dataset == "MAILABS":
   trim = True
   mag_num_feats = 401
   train = "train.csv"
   val = "val.csv"
-  batch_size = 32
+  batch_size = 16
 elif dataset == "LJ":
   trim = False
   mag_num_feats = 513
   train = "train.csv"
-  val = "test.csv"
+  val = "train.csv"
   batch_size = 8
 else:
   raise ValueError("Unknown dataset")
@@ -51,34 +51,43 @@ elif output_type == "both":
 else:
   raise ValueError("Unknown param for output_type")
 
-num_gpus = 8
+num_gpus = 1
 
-encoder_hidden_size = 512
-decoder_hidden_size = 256
+reduction_factor = 4
+encoder_window_size = 2
+decoder_window_size = 20 // reduction_factor
+
+encoder_hidden_size = 128
+decoder_hidden_size = 512
 
 num_heads = 8
-num_layers = 6
+num_layers = 4
 
 base_params = {
   "random_seed": 0,
-  "use_horovod": True,
+  "use_horovod": False,
   "max_steps": 1000000,
   "bench_start": 0,
 
   "num_gpus": num_gpus,
   "batch_size_per_gpu": batch_size,
 
-  "save_summaries_steps": 500,
-  "print_loss_steps": 500,
+  "save_summaries_steps": 100,
+  "print_loss_steps": 10,
   "print_samples_steps": 1000,
-  "eval_steps": 5000,
+  "eval_steps": 1000,
   "save_checkpoint_steps": 5000,
   "save_to_tensorboard": True,
   "logdir": "result/transformer-LJ-float",
   "max_grad_norm": 1.,
 
-  "optimizer": "Adam",
-  "optimizer_params": {},
+  "optimizer": "Momentum",
+  "optimizer_params": {
+    "momentum": 0.95,
+  },
+
+  # "optimizer": "Adam",
+  # "optimizer_params": {},
   "lr_policy": exp_decay,
   "lr_policy_params": {
     "learning_rate": 1e-3,
@@ -89,17 +98,50 @@ base_params = {
     "min_lr": 1e-5,
   },
   "dtype": tf.float32,
-  "regularizer": tf.contrib.layers.l2_regularizer,
+
   "regularizer_params": {
     "scale": 1e-6
   },
+  "regularizer": tf.contrib.layers.l2_regularizer,
   "initializer": tf.contrib.layers.xavier_initializer,
 
   "summaries": ["learning_rate", "variables", "gradients", "larc_summaries",
                 "variable_norm", "gradient_norm", "global_gradient_norm"],
 
+  # "encoder": ConvTTSEncoder,
+  # "encoder_params": {
+  #   "src_vocab_size": 94,
+  #   "embedding_size": encoder_hidden_size,
+  #   "output_size": encoder_hidden_size,
+  #   "pad_embeddings_2_eight": True,
+  #   "cnn_dropout_prob": 0.5,
+  #   "conv_layers": [
+  #     {
+  #       "kernel_size": [3], "stride": [1],
+  #       "num_channels": encoder_hidden_size, "padding": "SAME",
+  #       "activation_fn": tf.nn.relu
+  #     },
+  #     {
+  #       "kernel_size": [3], "stride": [1],
+  #       "num_channels": encoder_hidden_size, "padding": "SAME",
+  #       "activation_fn": tf.nn.relu
+  #     },
+  #     {
+  #       "kernel_size": [3], "stride": [1],
+  #       "num_channels": encoder_hidden_size, "padding": "SAME",
+  #       "activation_fn": tf.nn.relu
+  #     },
+  #     {
+  #       "kernel_size": [3], "stride": [1],
+  #       "num_channels": encoder_hidden_size, "padding": "SAME",
+  #       "activation_fn": tf.nn.relu
+  #     }
+  #   ]
+  # },
+
   "encoder": TransformerTTSEncoder,
   "encoder_params": {
+    "bn_momentum": 0.95,
     "cnn_dropout_prob": 0.5,
     "conv_layers": [
       {
@@ -128,16 +170,21 @@ base_params = {
     "layer_postprocess_dropout": 0.1,
     "pad_embeddings_2_eight": True,
     "remove_padding": True,
+    "window_size": encoder_window_size
   },
 
   "decoder": TransformerTTSDecoder,
   "decoder_params": {
+    "decoders_count": num_gpus,
+    "reduction_factor": reduction_factor,
+
     "enable_prenet": True,
     "prenet_layers": 2,
     "prenet_units": decoder_hidden_size,
 
     "enable_postnet": True,
-    "postnet_keep_dropout_prob": 0.5,
+    "postnet_bn_momentum": 0.99,
+    "postnet_keep_dropout_prob": 1.0, #0.5,
     "postnet_data_format": "channels_last",
     "postnet_conv_layers": [
       {
@@ -174,6 +221,7 @@ base_params = {
     "attention_dropout": 0.1,
     "relu_dropout": 0.1,
     "filter_size": 4 * decoder_hidden_size,
+    "window_size": decoder_window_size
   },
 
   "loss": TransformerTTSLoss,
@@ -184,6 +232,8 @@ base_params = {
   "data_layer": Text2SpeechDataLayer,
   "data_layer_params": {
     "dataset": dataset,
+    # "n_samples_train": 13100,
+    "n_samples_eval": 64,
     "num_audio_features": num_audio_features,
     "output_type": output_type,
     "vocab_file": "open_seq2seq/test_utils/vocab_tts.txt",
@@ -195,7 +245,7 @@ base_params = {
     "feature_normalize_std": 1.,
     "data_min": data_min,
     "mel_type": "htk",
-    "trim": trim,   
+    "trim": trim,
     "duration_max": 1024,
     "duration_min": 24,
     "exp_mag": exp_mag
@@ -225,7 +275,7 @@ eval_params = {
 infer_params = {
   "data_layer_params": {
     "dataset_files": [
-      os.path.join(dataset_location, "test.csv"),
+      os.path.join(dataset_location, "infer.csv"),
     ],
     "duration_max": 10000,
     "duration_min": 0,

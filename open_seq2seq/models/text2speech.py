@@ -210,7 +210,8 @@ class Text2Speech(EncoderDecoderModel):
     self._save_to_tensorboard = self.params["save_to_tensorboard"]
 
   def _get_alignments(self, attention_mask, modes, max_heads=3):
-    alignments_name = ["enc_self_alignment", "dec_self_alignment", "dec_encdec_alignment"]
+    # alignments_name = ["enc_self_alignment", "dec_self_alignment", "dec_encdec_alignment"]
+    alignments_name = ["dec_self_alignment", "dec_encdec_alignment"]
 
     specs = []
     titles = []
