@@ -53,7 +53,7 @@ else:
 
 num_gpus = 8
 
-reduction_factor = 8
+reduction_factor = 16
 encoder_window_size = 2
 decoder_window_size = 2
 
@@ -210,7 +210,8 @@ base_params = {
     "trim": trim,   
     "duration_max": 1024,
     "duration_min": 24,
-    "exp_mag": exp_mag
+    "exp_mag": exp_mag,
+    "pad_to": 16
   },
 }
 
