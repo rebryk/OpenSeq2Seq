@@ -53,7 +53,7 @@ else:
 
 num_gpus = 8
 
-reduction_factor = 16
+reduction_factor = 8
 encoder_window_size = 2
 decoder_window_size = 2
 
