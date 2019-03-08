@@ -104,7 +104,7 @@ base_params = {
 
   "encoder": TransformerTTSEncoder,
   "encoder_params": {
-    "bn_momentum": 0.99,
+    "bn_momentum": 0.95,
     "cnn_dropout_prob": 0.5,
     "conv_layers": [
       {
@@ -210,7 +210,8 @@ base_params = {
     "trim": trim,   
     "duration_max": 1024,
     "duration_min": 24,
-    "exp_mag": exp_mag
+    "exp_mag": exp_mag,
+    "pad_to": 16
   },
 }
 
