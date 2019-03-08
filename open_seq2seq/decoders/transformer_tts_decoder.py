@@ -137,8 +137,8 @@ class TransformerTTSDecoder(Decoder):
     decoder_inputs = self.prenet(decoder_inputs)
     decoder_inputs = self.linear_projection(decoder_inputs)
 
-    # with tf.name_scope("encoder_pos_encoding"):
-    #   encoder_outputs += self._positional_encoding(encoder_outputs)
+    with tf.name_scope("encoder_pos_encoding"):
+      encoder_outputs += self._positional_encoding(encoder_outputs)
 
     with tf.name_scope("decoder_pos_encoding"):
       decoder_inputs += self._positional_encoding(decoder_inputs)
