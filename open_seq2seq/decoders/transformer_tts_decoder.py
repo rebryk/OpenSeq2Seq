@@ -80,6 +80,8 @@ class TransformerTTSDecoder(Decoder):
     self.training = (mode == "train")
     self.n_feats = self.model.get_data_layer().params["num_audio_features"]
 
+    self.attention_window_size = params.get("attention_window_size", 3)
+
     if "both" in self.model.get_data_layer().params["output_type"]:
       self.both = True
       if not self.params.get("enable_postnet", True):
@@ -125,7 +127,8 @@ class TransformerTTSDecoder(Decoder):
     if self.params.get("enable_prenet", True):
       self.prenet.add_regularization(self.regularizer)
 
-  def decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
+  def decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias,
+                  sequence_lengths=None, last_positions=None, window_size=None):
     batch_size = tf.shape(decoder_inputs)[0]
     length = tf.shape(decoder_inputs)[1]
 
@@ -142,14 +145,16 @@ class TransformerTTSDecoder(Decoder):
       decoder_inputs += position_encoding
 
     length = tf.shape(decoder_inputs)[1]
-    window_size = self.params.get("window_size", -1)
-    decoder_self_attention_bias = get_window_attention_bias(length, window_size, causal=True)
+    self_attention_window_size = self.params.get("window_size", -1)
+    decoder_self_attention_bias = get_window_attention_bias(length, self_attention_window_size, causal=True)
 
-    decoder_output = self.decoder(
+    decoder_output, new_last_positions = self.decoder(
       decoder_inputs=decoder_inputs,
       encoder_outputs=encoder_outputs,
       decoder_self_attention_bias=decoder_self_attention_bias,
       attention_bias=enc_dec_attention_bias,
+      last_positions=last_positions,
+      window_size=window_size
     )
 
     alignments = []
@@ -168,7 +173,7 @@ class TransformerTTSDecoder(Decoder):
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
 
-    return {
+    output = {
         "spec": decoder_spec_output,
         "post_net_spec": spectrogram_prediction,
         "alignments": alignments,
@@ -176,6 +181,8 @@ class TransformerTTSDecoder(Decoder):
         "lengths": sequence_lengths,
         "mag_spec": mag_spec_prediction
     }
+
+    return output, new_last_positions
 
   def _convert_outputs(self, outputs):
     batch_size = self.model.params["batch_size_per_gpu"]
@@ -212,8 +219,7 @@ class TransformerTTSDecoder(Decoder):
       self.params["dtype"]
     )
 
-    monotonic = self.params.get("monotonic", False)
-    self.decoder = TransformerDecoder(self.params, self.training, monotonic=monotonic)
+    self.decoder = TransformerDecoder(self.params, self.training)
 
     # The same decoder post-net is used in Tacotron2
     self.postnet = Postnet(
@@ -275,7 +281,7 @@ class TransformerTTSDecoder(Decoder):
       targets = self._collapse(targets, self.features_count)
       decoder_inputs = tf.pad(targets, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
 
-    outputs = self.decode_pass(
+    outputs, _ = self.decode_pass(
       decoder_inputs,
       encoder_outputs,
       encoder_decoder_attention_bias,
@@ -315,6 +321,7 @@ class TransformerTTSDecoder(Decoder):
 
     state = {
       "iteration": tf.constant(0),
+      "last_positions": tf.zeros([self._params["num_hidden_layers"], batch_size, self._params["num_heads"], 1], dtype=tf.int32),
       "inputs": tf.zeros([batch_size, 1, self.features_count * self.reduction_factor]),
       "finished": tf.cast(tf.zeros([batch_size]), tf.bool),
       "outputs": {
@@ -335,6 +342,7 @@ class TransformerTTSDecoder(Decoder):
 
     state_shape_invariants = {
       "iteration": tf.TensorShape([]),
+      "last_positions": tf.TensorShape([self._params["num_hidden_layers"], None, self._params["num_heads"], None]),
       "inputs": tf.TensorShape([None, None, self.features_count * self.reduction_factor]),
       "finished": tf.TensorShape([None]),
       "outputs": {
@@ -365,10 +373,12 @@ class TransformerTTSDecoder(Decoder):
     encoder_outputs = state["encoder_outputs"]
     encoder_decoder_attention_bias = state["encoder_decoder_attention_bias"]
 
-    outputs = self.decode_pass(
+    outputs, new_last_positions = self.decode_pass(
       inputs,
       encoder_outputs,
-      encoder_decoder_attention_bias
+      encoder_decoder_attention_bias,
+      last_positions=state["last_positions"],
+      window_size=self.attention_window_size
     )
 
     mel_spec_prediction = outputs["post_net_spec"][:, -1:, :]
@@ -391,7 +401,7 @@ class TransformerTTSDecoder(Decoder):
     lengths = tf.where(state["finished"], lengths, lengths + 1 * self.reduction_factor)
     outputs["lengths"] = lengths
 
-    # Update spec, post_net_spec and mag_spec
+    # Update spec, post_net_spec and mag_spechttp://localhost:6006/data/plugin/images/individualImage?ts=1552095328.2167232&run=.&tag=eval_image&sample=0&index=1
     for key in ["spec", "post_net_spec", "mag_spec"]:
       output = outputs[key][:, -1:, :]
       output = tf.where(state["finished"], tf.zeros_like(output), output)
@@ -437,6 +447,7 @@ class TransformerTTSDecoder(Decoder):
     state["inputs"] = next_inputs
     state["finished"] = finished
     state["outputs"] = outputs
+    state["last_positions"] = tf.concat([state["last_positions"], new_last_positions], axis=-1)
 
     return state
 
