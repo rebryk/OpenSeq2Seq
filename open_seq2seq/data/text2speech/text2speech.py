@@ -52,7 +52,8 @@ class Text2SpeechDataLayer(DataLayer):
             "exp_mag": bool,
             'style_input': [None, 'wav'],
             'n_samples_train': int,
-            'n_samples_eval': int
+            'n_samples_eval': int,
+            'n_fft': int
         }
     )
 
@@ -123,7 +124,7 @@ class Text2SpeechDataLayer(DataLayer):
 
     if self.params["dataset"] == "LJ":
       self._sampling_rate = 22050
-      self._n_fft = 1024
+      self._n_fft = self.params.get("n_fft", 1024)
     elif self.params["dataset"] == "MAILABS":
       self._sampling_rate = 16000
       self._n_fft = 800
