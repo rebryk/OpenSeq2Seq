@@ -401,7 +401,7 @@ class TransformerTTSDecoder(Decoder):
     lengths = tf.where(state["finished"], lengths, lengths + 1 * self.reduction_factor)
     outputs["lengths"] = lengths
 
-    # Update spec, post_net_spec and mag_spechttp://localhost:6006/data/plugin/images/individualImage?ts=1552095328.2167232&run=.&tag=eval_image&sample=0&index=1
+    # Update spec, post_net_spec and mag_spec
     for key in ["spec", "post_net_spec", "mag_spec"]:
       output = outputs[key][:, -1:, :]
       output = tf.where(state["finished"], tf.zeros_like(output), output)
