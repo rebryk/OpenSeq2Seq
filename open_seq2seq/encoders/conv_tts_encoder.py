@@ -96,7 +96,7 @@ class ConvTTSEncoder(Encoder):
       name="linear_projection",
       units=self._params["output_size"],
       use_bias=False,
-      regularizer=regularizer
+      kernel_regularizer=regularizer
     )
     self.layers.append(linear_projection)
 
