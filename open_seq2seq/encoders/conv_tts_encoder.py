@@ -51,14 +51,16 @@ class ConvTTSEncoder(Encoder):
     self.layers = []
 
   def _build_layers(self):
+    regularizer = self._params.get("regularizer", None)
+
     embedding = embedding_layer.EmbeddingSharedWeights(
       vocab_size=self._params["src_vocab_size"],
       hidden_size=self._params["embedding_size"],
-      pad_vocab_to_eight=self.params.get("pad_embeddings_2_eight", False)
+      pad_vocab_to_eight=self.params.get("pad_embeddings_2_eight", False),
+      regularizer=regularizer
     )
     self.layers.append(embedding)
 
-    regularizer = self._params.get("regularizer", None)
     cnn_dropout_prob = self._params.get("cnn_dropout_prob", 0.5)
 
     for index, params in enumerate(self._params["conv_layers"]):
@@ -93,7 +95,8 @@ class ConvTTSEncoder(Encoder):
     linear_projection = tf.layers.Dense(
       name="linear_projection",
       units=self._params["output_size"],
-      use_bias=False
+      use_bias=False,
+      regularizer=regularizer
     )
     self.layers.append(linear_projection)
 
