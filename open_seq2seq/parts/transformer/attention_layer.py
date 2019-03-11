@@ -55,7 +55,7 @@ class Attention(tf.layers.Layer):
       attention_dropout,
       train,
       mode="loung",
-      monotonic=False
+      regularizer=None
   ):
     if hidden_size % num_heads != 0:
       raise ValueError("Hidden size must be evenly divisible by the number of "
@@ -67,15 +67,17 @@ class Attention(tf.layers.Layer):
     self.attention_dropout = attention_dropout
     self.train = train
     self.mode = mode
-    self.monotonic = monotonic
 
     # Layers for linearly projecting the queries, keys, and values.
-    self.q_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="q")
-    self.k_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="k")
-    self.v_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="v")
-
+    self.q_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="q",
+                                         kernel_regularizer=regularizer)
+    self.k_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="k",
+                                         kernel_regularizer=regularizer)
+    self.v_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="v",
+                                         kernel_regularizer=regularizer)
     self.output_dense_layer = tf.layers.Dense(hidden_size, use_bias=False,
-                                              name="output_transform")
+                                         name="output_transform",
+                                         kernel_regularizer=regularizer)
 
   def split_heads(self, x):
     """Split x into different heads, and transpose the resulting value.
@@ -176,29 +178,6 @@ class Attention(tf.layers.Layer):
       else:
         logits += bias
         weights = tf.nn.softmax(logits, name="attention_weights")
-
-        if self.monotonic and self.train:
-          init_length = 5
-          n_samples = tf.shape(weights)[0]
-          n_head = tf.shape(weights)[1]
-          n_audio = tf.shape(weights)[2]
-          n_text = tf.shape(weights)[3]
-
-          # Create init attention
-          mask_one = tf.ones([n_samples, n_head, 1, init_length], dtype=dtype)
-          mask_zero = tf.zeros([n_samples, n_head, 1, n_text - init_length], dtype=dtype)
-          mask = tf.concat([mask_one, mask_zero], axis=3) / init_length
-
-          weights = tf.concat([mask, weights], axis=2)
-          weights = tf.concat([tf.zeros([n_samples, n_head, n_audio + 1, 1]), weights], axis=3)
-          weights = tf.cumsum(weights, axis=3)
-          weights = safe_cumprod(weights, axis=2)
-          weights = weights[:, :, :, 1:] - weights[:, :, :, :-1]
-          weights = weights[:, :, 1:, :]
-
-        if self.monotonic and not self.train:
-          # TODO: implement
-          pass
 
     elif self.mode == "bahdanau":
       att_v = tf.get_variable(
