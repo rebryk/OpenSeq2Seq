@@ -9,8 +9,9 @@ from open_seq2seq.parts.transformer.common import PrePostProcessingWrapper, Laye
 
 
 class TransformerDecoder:
-  def __init__(self, params, training):
+  def __init__(self, params, training, monotonic=False):
     self.layers = []
+    self.monotonic = monotonic
 
     for _ in range(params["num_hidden_layers"]):
       self_attention_layer = attention_layer.SelfAttention(
@@ -28,7 +29,7 @@ class TransformerDecoder:
 
       self.layers.append([
         PrePostProcessingWrapper(self_attention_layer, params, training),
-        PrePostProcessingWrapper(enc_dec_attention_layer, params, training, pass_value=not training),
+        PrePostProcessingWrapper(enc_dec_attention_layer, params, training, pass_value=(not training) and monotonic),
         PrePostProcessingWrapper(feed_forward_network, params, training)
       ])
 
@@ -36,7 +37,6 @@ class TransformerDecoder:
 
   def __call__(self, decoder_inputs, encoder_outputs, decoder_self_attention_bias, attention_bias,
                cache=None, last_positions=None, window_size=None):
-    monotonic_attention = last_positions is not None
     new_last_positions = []
 
     for n, layer in enumerate(self.layers):
@@ -52,7 +52,7 @@ class TransformerDecoder:
           decoder_inputs = self_attention_layer(decoder_inputs, decoder_self_attention_bias, cache=layer_cache)
 
         with tf.variable_scope("encdec_attention"):
-          if monotonic_attention:
+          if self.monotonic:
             decoder_inputs, new_last_position = enc_dec_attention_layer(
               decoder_inputs,
               encoder_outputs,
@@ -67,7 +67,7 @@ class TransformerDecoder:
         with tf.variable_scope("ffn"):
           decoder_inputs = feed_forward_network(decoder_inputs)
 
-    if monotonic_attention:
+    if self.monotonic:
       new_last_positions = tf.stack(new_last_positions)
     else:
       new_last_positions = None

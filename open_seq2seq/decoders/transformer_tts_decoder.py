@@ -219,7 +219,7 @@ class TransformerTTSDecoder(Decoder):
       self.params["dtype"]
     )
 
-    self.decoder = TransformerDecoder(self.params, self.training)
+    self.decoder = TransformerDecoder(self.params, self.training, monotonic=False)
 
     # The same decoder post-net is used in Tacotron2
     self.postnet = Postnet(
@@ -447,7 +447,9 @@ class TransformerTTSDecoder(Decoder):
     state["inputs"] = next_inputs
     state["finished"] = finished
     state["outputs"] = outputs
-    state["last_positions"] = tf.concat([state["last_positions"], new_last_positions], axis=-1)
+
+    if new_last_positions is not None:
+      state["last_positions"] = tf.concat([state["last_positions"], new_last_positions], axis=-1)
 
     return state
 
