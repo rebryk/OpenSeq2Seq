@@ -221,8 +221,7 @@ class TransformerTTSDecoder(Decoder):
       use_bias=False
     )
 
-    monotonic = self.params.get("monotonic", False)
-    self.decoder = TransformerDecoder(self.params, self.training, monotonic=monotonic)
+    self.decoder = TransformerDecoder(self.params, self.training)
 
     # The same decoder post-net is used in Tacotron2
     self.postnet = Postnet(
