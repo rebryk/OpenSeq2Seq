@@ -35,13 +35,15 @@ class LayerNormalization(tf.layers.Layer):
     return tf.cast(x=result, dtype=dtype)
 
 
+# TODO: remove pass_value flag
 class PrePostProcessingWrapper(object):
   """Wrapper class that applies layer pre-processing and post-processing."""
 
-  def __init__(self, layer, params, train):
+  def __init__(self, layer, params, train, pass_value=False):
     self.layer = layer
     self.postprocess_dropout = params["layer_postprocess_dropout"]
     self.train = train
+    self.pass_value = pass_value
 
     # Create normalization layer
     self.layer_norm = LayerNormalization(params["hidden_size"])
@@ -53,7 +55,16 @@ class PrePostProcessingWrapper(object):
     # Get layer output
     y = self.layer(y, *args, **kwargs)
 
+    if self.pass_value:
+      y, value = y
+
     # Postprocessing: apply dropout and residual connection
     if self.train:
       y = tf.nn.dropout(y, keep_prob = 1 - self.postprocess_dropout)
-    return x + y
+
+    y = x + y
+
+    if self.pass_value:
+      return y, value
+
+    return y
