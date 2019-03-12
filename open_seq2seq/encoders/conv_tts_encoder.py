@@ -19,7 +19,7 @@ class BatchNorm1D:
 
 
 class ConvBlock:
-  def __init__(self, name, conv, norm, activation_fn, dropout, training, is_residual=True):
+  def __init__(self, name, conv, norm, activation_fn, dropout, training, is_residual, is_causal):
     self.name = name
     self.conv = conv
     self.norm = norm
@@ -27,10 +27,18 @@ class ConvBlock:
     self.dropout = dropout
     self.training = training
     self.is_residual = is_residual
+    self.is_casual = is_causal
 
   def __call__(self, x):
     with tf.variable_scope(self.name):
-      y = self.conv(x)
+      if self.is_casual:
+        # Add padding from the left side to avoid looking to the future
+        pad_size = self.conv.kernel_size[0] - 1
+        y = tf.pad(x, [[0, 0], [pad_size, 0], [0, 0]])
+      else:
+        y = x
+
+      y = self.conv(y)
 
       if self.norm is not None:
         y = self.norm(y, training=self.training)
@@ -45,12 +53,14 @@ class ConvBlock:
 
   @staticmethod
   def create(index,
-            conv_params,
-            regularizer,
-            bn_momentum,
-            bn_epsilon,
-            cnn_dropout_prob,
-            training):
+             conv_params,
+             regularizer,
+             bn_momentum,
+             bn_epsilon,
+             cnn_dropout_prob,
+             training,
+             is_residual=True,
+             is_causal=False):
     activation_fn = conv_params.get("activation_fn", tf.nn.relu)
 
     conv = tf.layers.Conv1D(
@@ -74,7 +84,7 @@ class ConvBlock:
       rate=cnn_dropout_prob
     )
 
-    return ConvBlock("layer_%d" % index, conv, norm, activation_fn, dropout, training)
+    return ConvBlock("layer_%d" % index, conv, norm, activation_fn, dropout, training, is_residual, is_causal)
 
 
 class ConvTTSEncoder(Encoder):
