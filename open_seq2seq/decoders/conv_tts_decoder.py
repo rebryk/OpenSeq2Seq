@@ -1,0 +1,335 @@
+import tensorflow as tf
+
+from open_seq2seq.encoders.conv_tts_encoder import ConvBlock
+from open_seq2seq.parts.transformer import attention_layer
+from open_seq2seq.parts.transformer import utils
+from open_seq2seq.parts.transformer.common import PrePostProcessingWrapper, LayerNormalization
+from .decoder import Decoder
+
+
+class Prenet:
+  def __init__(self, n_layers, hidden_size, activation_fn, dropout=0.5, regularizer=None, training=True, dtype=None):
+    self.layers = []
+    self.dropout = dropout
+    self.training = training
+
+    for i in range(n_layers):
+      layer = tf.layers.Dense(
+        name="layer_%d" % i,
+        units=hidden_size,
+        use_bias=True,
+        activation=activation_fn,
+        kernel_regularizer=regularizer,
+        dtype=dtype
+      )
+      self.layers.append(layer)
+
+    self.linear_projection = tf.layers.Dense(
+      name="linear_projection",
+      units=hidden_size,
+      use_bias=False,
+      kernel_regularizer=regularizer,
+      dtype=dtype
+    )
+
+  def __call__(self, x):
+    # TODO: do we need to use dropout here?
+    with tf.variable_scope("prenet"):
+      for layer in self.layers:
+        x = tf.layers.dropout(layer(x), rate=self.dropout, training=self.training)
+
+      x = self.linear_projection(x)
+
+    return x
+
+
+class AttentionBlock:
+  def __init__(self, hidden_size, attention_dropout, layer_postprocess_dropout, training, regularizer=None):
+    attention = attention_layer.Attention(
+      hidden_size=hidden_size,
+      num_heads=1,
+      attention_dropout=attention_dropout,
+      regularizer=regularizer,
+      train=training
+    )
+
+    feed_forward = tf.layers.Dense(
+      units=hidden_size,
+      use_bias=True,
+      kernel_regularizer=regularizer
+    )
+
+    wrapper_params = {
+      "hidden_size": hidden_size,
+      "layer_postprocess_dropout": layer_postprocess_dropout
+    }
+
+    self.attention = PrePostProcessingWrapper(
+      layer=attention,
+      params=wrapper_params,
+      training=training
+    )
+
+    self.feed_forward = PrePostProcessingWrapper(
+      layer=feed_forward,
+      params=wrapper_params,
+      training=training
+    )
+
+    self.output_normalization = LayerNormalization(hidden_size)
+
+  def __call__(self, decoder_inputs, encoder_outputs, attention_bias):
+    with tf.variable_scope("attention_block"):
+      with tf.variable_scope("attention"):
+        y = self.attention(decoder_inputs, encoder_outputs, attention_bias)
+
+      with tf.variable_scope("feed_forward"):
+        y = self.feed_forward(y)
+
+      y = self.output_normalization(y)
+
+    return y
+
+
+class ConvTTSDecoder(Decoder):
+  @staticmethod
+  def get_required_params():
+    """Static method with description of required parameters.
+
+      Returns:
+        dict:
+            Dictionary containing all the parameters that **have to** be
+            included into the ``params`` parameter of the
+            class :meth:`__init__` method.
+    """
+    return dict(Decoder.get_required_params(), **{
+      "prenet_layers": int,
+      "prenet_hidden_size": int,
+      "hidden_size": int,
+      "conv_layers": list,
+      "attention_dropout": float,
+      "layer_postprocess_dropout": float
+    })
+
+  @staticmethod
+  def get_optional_params():
+    """Static method with description of optional parameters.
+
+      Returns:
+        dict:
+            Dictionary containing all the parameters that **can** be
+            included into the ``params`` parameter of the
+            class :meth:`__init__` method.
+    """
+    return dict(Decoder.get_optional_params(), **{
+      "prenet_activation_fn": None,
+      "prenet_dropout": float,
+      "cnn_dropout_prob": float,
+      "bn_momentum": float,
+      "bn_epsilon": float,
+      "reduction_factor": int
+    })
+
+  def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
+    super(ConvTTSDecoder, self).__init__(params, model, name, mode)
+
+    data_layer_params = model.get_data_layer().params
+    n_feats = data_layer_params["num_audio_features"]
+    use_mag = "both" in data_layer_params["output_type"]
+
+    self.training = mode == "train"
+    self.prenet = None
+    self.attention = None
+    self.conv_layers = []
+    self.stop_token_projection_layer = None
+    self.mel_projection_layer = None
+
+    self.n_mel = n_feats["mel"] if use_mag else n_feats
+    self.n_mag = n_feats["mag"] if use_mag else None
+    self.reduction_factor = params.get("reduction_factor", 1)
+
+  def _build_layers(self):
+    regularizer = self._params.get("regularizer", None)
+
+    # TODO: dropout during inference?
+    self.prenet = Prenet(
+      n_layers=self._params["prenet_layers"],
+      hidden_size=self._params["prenet_hidden_size"],
+      activation_fn=self._params.get("prenet_activation_fn", tf.nn.relu),
+      dropout=self._params.get("prenet_dropout", 0.5),
+      regularizer=regularizer,
+      training=self.training,
+      dtype=self._params["dtype"]
+    )
+
+    self.attention = AttentionBlock(
+      hidden_size=self._params["hidden_size"],
+      attention_dropout=self._params["attention_dropout"],
+      layer_postprocess_dropout=self._params["layer_postprocess_dropout"],
+      regularizer=regularizer,
+      training=self.training
+    )
+
+    cnn_dropout_prob = self._params.get("cnn_dropout_prob", 0.5)
+    bn_momentum = self._params.get("bn_momentum", 0.95)
+    bn_epsilon = self._params.get("bn_epsilon", -1e8)
+
+    for index, params in enumerate(self._params["conv_layers"]):
+      layer = ConvBlock.create(
+        index=index,
+        conv_params=params,
+        regularizer=regularizer,
+        bn_momentum=bn_momentum,
+        bn_epsilon=bn_epsilon,
+        cnn_dropout_prob=cnn_dropout_prob,
+        training=self.training,
+        is_causal=True
+      )
+      self.conv_layers.append(layer)
+
+    # TODO: Do we need to use bias?
+    self.mel_projection_layer = tf.layers.Dense(
+      name="mel_projection",
+      units=self.n_mel * self.reduction_factor,
+      use_bias=True,
+      kernel_regularizer=regularizer
+    )
+
+    if self.n_mag:
+      # TODO: implement mag predeciotn
+      pass
+
+    # TODO: Do we need to use bias?
+    self.stop_token_projection_layer = tf.layers.Dense(
+      name="stop_token_projection",
+      units=1 * self.reduction_factor,
+      use_bias=True,
+      kernel_regularizer=regularizer
+    )
+
+  def _decode(self, input_dict):
+    self._build_layers()
+
+    if "target_tensors" in input_dict:
+      targets = input_dict["target_tensors"][0]
+    else:
+      targets = None
+
+    encoder_outputs = input_dict["encoder_output"]["outputs"]
+    inputs_attention_bias = input_dict["encoder_output"]["inputs_attention_bias"]
+
+    spec_length = None
+
+    if self.mode == "train" or self.mode == "eval":
+      spec_length = input_dict["target_tensors"][2] if "target_tensors" in input_dict else None
+
+    if self.training:
+      return self._train(targets, encoder_outputs, inputs_attention_bias, spec_length)
+
+    return self._infer(encoder_outputs, inputs_attention_bias, spec_length)
+
+  def _decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
+    decoder_inputs = self.prenet(decoder_inputs)
+
+    with tf.variable_scope("decoder_pos_encoding"):
+      decoder_inputs += self._positional_encoding(decoder_inputs, self.params["dtype"])
+
+    with tf.variable_scope("encoder_pos_encoding"):
+      encoder_outputs += self._positional_encoding(encoder_outputs, self.params["dtype"])
+
+    y = self.attention(decoder_inputs, encoder_outputs, enc_dec_attention_bias)
+
+    for layer in self.conv_layers:
+      y = layer(y)
+
+    with tf.variable_scope("mag_projection"):
+      batch_size = tf.shape(y)[0]
+
+      if self.n_mag:
+        # TODO: mag spec
+        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
+      else:
+        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
+
+    mel_spec = self.mel_projection_layer(y)
+    stop_token_logits = self.stop_token_projection_layer(y)
+
+    if sequence_lengths is None:
+      sequence_lengths = tf.zeros([batch_size])
+
+    with tf.variable_scope("alignments"):
+      weights = []
+      op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/attention_weights"
+      weights_operation = tf.get_default_graph().get_operation_by_name(op)
+      weights.append(weights_operation.values()[0])
+      alignments = tf.stack(weights)
+      alignments = tf.expand_dims(alignments, 1)
+
+      # batch_size = tf.shape(y)[0]
+      # alignments = []
+      # for _ in range(1):
+      #   alignments.append(tf.zeros([batch_size, batch_size, batch_size, batch_size, batch_size]))
+
+    return {
+      "spec": mel_spec,
+      "post_net_spec": mel_spec,
+      "alignments": alignments,
+      "stop_token_logits": stop_token_logits,
+      "lengths": sequence_lengths,
+      "mag_spec": mag_spec
+    }
+
+  def _train(self, targets, encoder_outputs, enc_dec_attention_bias, sequence_lengths):
+    # Shift targets to the right, and remove the last element
+    with tf.name_scope("shift_targets"):
+      targets = targets[:, :, :self.n_mel]
+      targets = self._collapse(targets, self.n_mel, self.reduction_factor)
+      decoder_inputs = tf.pad(targets, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+
+    outputs = self._decode_pass(
+      decoder_inputs=decoder_inputs,
+      encoder_outputs=encoder_outputs,
+      enc_dec_attention_bias=enc_dec_attention_bias,
+      sequence_lengths=sequence_lengths
+    )
+
+    with tf.variable_scope("convert_output"):
+      for key in ["spec", "post_net_spec", "stop_token_logits", "mag_spec"]:
+        outputs[key] = self._extend(outputs[key], self.reduction_factor)
+
+      return self._convert_outputs(outputs, self._model.params["batch_size_per_gpu"])
+
+  def _infer(self, encoder_outputs, enc_dec_attention_bias, sequence_lengths):
+    pass
+
+  def _convert_outputs(self, outputs, batch_size):
+    alignments = [[outputs["alignments"][it][:, sample, :, :, :] for it in range(1)] for sample in range(batch_size)]
+
+    return {
+      "outputs": [
+        outputs["spec"], outputs["post_net_spec"], alignments,
+        tf.sigmoid(outputs["stop_token_logits"]), outputs["lengths"], outputs["mag_spec"]
+      ],
+      "stop_token_logits": outputs["stop_token_logits"]
+    }
+
+  @staticmethod
+  def _collapse(values, last_dim, reduction_factor):
+    shape = tf.shape(values)
+    values = tf.reshape(values, [shape[0], shape[1] // reduction_factor, last_dim * reduction_factor])
+    return values
+
+  @staticmethod
+  def _extend(values, reduction_factor):
+    shape = tf.shape(values)
+    values = tf.reshape(values, [shape[0], shape[1] * reduction_factor, shape[2] // reduction_factor])
+    return values
+
+  @staticmethod
+  def _positional_encoding(x, dtype):
+    length = tf.shape(x)[1]
+    features_count = tf.shape(x)[2]
+    features_count_even = features_count if (features_count % 2 == 0) else (features_count + 1)
+    position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), dtype)
+    position_encoding = position_encoding[:, :features_count]
+    return position_encoding
