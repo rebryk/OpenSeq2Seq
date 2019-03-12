@@ -18,7 +18,7 @@ class BatchNorm1D:
       return y
 
 
-class EncoderBlock:
+class ConvBlock:
   def __init__(self, name, conv, norm, activation_fn, dropout, training, is_residual=True):
     self.name = name
     self.conv = conv
@@ -43,6 +43,39 @@ class EncoderBlock:
 
       return x + y if self.is_residual else y
 
+  @staticmethod
+  def create(index,
+            conv_params,
+            regularizer,
+            bn_momentum,
+            bn_epsilon,
+            cnn_dropout_prob,
+            training):
+    activation_fn = conv_params.get("activation_fn", tf.nn.relu)
+
+    conv = tf.layers.Conv1D(
+      name="conv_%d" % index,
+      filters=conv_params["num_channels"],
+      kernel_size=conv_params["kernel_size"],
+      strides=conv_params["stride"],
+      padding=conv_params["padding"],
+      kernel_regularizer=regularizer
+    )
+
+    norm = BatchNorm1D(
+      name="bn_%d" % index,
+      gamma_regularizer=regularizer,
+      momentum=bn_momentum,
+      epsilon=bn_epsilon
+    )
+
+    dropout = tf.layers.Dropout(
+      name="dropout_%d" % index,
+      rate=cnn_dropout_prob
+    )
+
+    return ConvBlock("layer_%d" % index, conv, norm, activation_fn, dropout, training)
+
 
 class ConvTTSEncoder(Encoder):
   def __init__(self, params, model, name="conv_tts_encoder", mode="train"):
@@ -62,34 +95,20 @@ class ConvTTSEncoder(Encoder):
     self.layers.append(embedding)
 
     cnn_dropout_prob = self._params.get("cnn_dropout_prob", 0.5)
+    bn_momentum = self._params.get("bn_momentum", 0.95)
+    bn_epsilon = self._params.get("bn_epsilon", -1e8)
 
     for index, params in enumerate(self._params["conv_layers"]):
-      activation_fn = params.get("activation_fn", tf.nn.relu)
-
-      conv = tf.layers.Conv1D(
-        name="conv_%d" % index,
-        filters=params["num_channels"],
-        kernel_size=params["kernel_size"],
-        strides=params["stride"],
-        padding=params["padding"],
-        kernel_regularizer=regularizer
+      layer = ConvBlock.create(
+        index=index,
+        conv_params=params,
+        regularizer=regularizer,
+        bn_momentum=bn_momentum,
+        bn_epsilon=bn_epsilon,
+        cnn_dropout_prob=cnn_dropout_prob,
+        training=self.training
       )
 
-      bn_momentum = self._params.get("bn_momentum", 0.95)
-      bn_epsilon = self._params.get("bn_epsilon", -1e8)
-      norm = BatchNorm1D(
-        name="bn_%d" % index,
-        gamma_regularizer=regularizer,
-        momentum=bn_momentum,
-        epsilon=bn_epsilon
-      )
-
-      dropout = tf.layers.Dropout(
-        name="dropout_%d" % index,
-        rate=cnn_dropout_prob
-      )
-
-      layer = EncoderBlock("layer_%d" % index, conv, norm, activation_fn, dropout, self.training)
       self.layers.append(layer)
 
     linear_projection = tf.layers.Dense(
