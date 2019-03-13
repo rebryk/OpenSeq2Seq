@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.ops import math_ops
 
 from open_seq2seq.encoders.conv_tts_encoder import ConvBlock
 from open_seq2seq.parts.transformer import attention_layer
@@ -8,7 +9,16 @@ from .decoder import Decoder
 
 
 class Prenet:
-  def __init__(self, n_layers, hidden_size, activation_fn, dropout=0.5, regularizer=None, training=True, dtype=None):
+  def __init__(self,
+               n_layers,
+               hidden_size,
+               activation_fn,
+               dropout=0.5,
+               regularizer=None,
+               training=True,
+               dtype=None,
+               name="prenet"):
+    self.name = name
     self.layers = []
     self.dropout = dropout
     self.training = training
@@ -34,17 +44,23 @@ class Prenet:
 
   def __call__(self, x):
     # TODO: do we need to use dropout here?
-    with tf.variable_scope("prenet"):
+    with tf.variable_scope(self.name):
       for layer in self.layers:
         x = tf.layers.dropout(layer(x), rate=self.dropout, training=self.training)
 
-      x = self.linear_projection(x)
-
-    return x
+      return self.linear_projection(x)
 
 
 class AttentionBlock:
-  def __init__(self, hidden_size, attention_dropout, layer_postprocess_dropout, training, regularizer=None):
+  def __init__(self,
+               hidden_size,
+               attention_dropout,
+               layer_postprocess_dropout,
+               training,
+               regularizer=None,
+               name="attention_block"):
+    self.name = name
+
     attention = attention_layer.Attention(
       hidden_size=hidden_size,
       num_heads=1,
@@ -79,16 +95,14 @@ class AttentionBlock:
     self.output_normalization = LayerNormalization(hidden_size)
 
   def __call__(self, decoder_inputs, encoder_outputs, attention_bias):
-    with tf.variable_scope("attention_block"):
+    with tf.variable_scope(self.name):
       with tf.variable_scope("attention"):
         y = self.attention(decoder_inputs, encoder_outputs, attention_bias)
 
       with tf.variable_scope("feed_forward"):
         y = self.feed_forward(y)
 
-      y = self.output_normalization(y)
-
-    return y
+      return self.output_normalization(y)
 
 
 class ConvTTSDecoder(Decoder):
@@ -245,11 +259,11 @@ class ConvTTSDecoder(Decoder):
     with tf.variable_scope("mag_projection"):
       batch_size = tf.shape(y)[0]
 
-      if self.n_mag:
-        # TODO: mag spec
-        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
-      else:
-        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
+    if self.n_mag:
+      # TODO: mag spec
+      mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
+    else:
+      mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
 
     mel_spec = self.mel_projection_layer(y)
     stop_token_logits = self.stop_token_projection_layer(y)
@@ -257,23 +271,10 @@ class ConvTTSDecoder(Decoder):
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
 
-    with tf.variable_scope("alignments"):
-      weights = []
-      op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/attention_weights"
-      weights_operation = tf.get_default_graph().get_operation_by_name(op)
-      weights.append(weights_operation.values()[0])
-      alignments = tf.stack(weights)
-      alignments = tf.expand_dims(alignments, 1)
-
-      # batch_size = tf.shape(y)[0]
-      # alignments = []
-      # for _ in range(1):
-      #   alignments.append(tf.zeros([batch_size, batch_size, batch_size, batch_size, batch_size]))
-
     return {
       "spec": mel_spec,
       "post_net_spec": mel_spec,
-      "alignments": alignments,
+      "alignments": None,
       "stop_token_logits": stop_token_logits,
       "lengths": sequence_lengths,
       "mag_spec": mag_spec
@@ -293,25 +294,147 @@ class ConvTTSDecoder(Decoder):
       sequence_lengths=sequence_lengths
     )
 
-    with tf.variable_scope("convert_output"):
-      for key in ["spec", "post_net_spec", "stop_token_logits", "mag_spec"]:
-        outputs[key] = self._extend(outputs[key], self.reduction_factor)
+    with tf.variable_scope("alignments"):
+      weights = []
+      op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/attention_weights"
+      weights_operation = tf.get_default_graph().get_operation_by_name(op)
+      weights.append(weights_operation.values()[0])
+      outputs["alignments"] = tf.expand_dims(tf.stack(weights), 1)
 
-      return self._convert_outputs(outputs, self._model.params["batch_size_per_gpu"])
+    return self._convert_outputs(outputs, self.reduction_factor, self._model.params["batch_size_per_gpu"])
 
   def _infer(self, encoder_outputs, enc_dec_attention_bias, sequence_lengths):
-    pass
+    # TODO: choose better value
+    if sequence_lengths is None:
+      maximum_iterations = 1000
+    else:
+      maximum_iterations = tf.reduce_max(sequence_lengths)
 
-  def _convert_outputs(self, outputs, batch_size):
-    alignments = [[outputs["alignments"][it][:, sample, :, :, :] for it in range(1)] for sample in range(batch_size)]
+    maximum_iterations //= self.reduction_factor
 
-    return {
-      "outputs": [
-        outputs["spec"], outputs["post_net_spec"], alignments,
-        tf.sigmoid(outputs["stop_token_logits"]), outputs["lengths"], outputs["mag_spec"]
-      ],
-      "stop_token_logits": outputs["stop_token_logits"]
-    }
+    state, state_shape_invariants = self._inference_initial_state(encoder_outputs, enc_dec_attention_bias)
+
+    state = tf.while_loop(
+      cond=self._inference_cond,
+      body=self._inference_step,
+      loop_vars=[state],
+      shape_invariants=state_shape_invariants,
+      back_prop=False,
+      maximum_iterations=maximum_iterations,
+      parallel_iterations=1
+    )
+
+    return self._convert_outputs(state["outputs"], self.reduction_factor, self._model.params["batch_size_per_gpu"])
+
+  def _inference_initial_state(self, encoder_outputs, encoder_decoder_attention_bias):
+    with tf.variable_scope("inference_initial_state"):
+      batch_size = tf.shape(encoder_outputs)[0]
+      num_mag_features = self.n_mag or batch_size
+
+      state = {
+        "iteration": tf.constant(0),
+        "inputs": tf.zeros([batch_size, 1, self.n_mel * self.reduction_factor]),
+        "finished": tf.cast(tf.zeros([batch_size]), tf.bool),
+        "outputs": {
+          "spec": tf.zeros([batch_size, 0, self.n_mel * self.reduction_factor]),
+          "post_net_spec": tf.zeros([batch_size, 0, self.n_mel * self.reduction_factor]),
+          "alignments": [
+            tf.zeros([0, 0, 0, 0, 0])
+          ],
+          "stop_token_logits": tf.zeros([batch_size, 0, 1 * self.reduction_factor]),
+          "lengths": tf.zeros([batch_size], dtype=tf.int32),
+          "mag_spec": tf.zeros([batch_size, 0, num_mag_features * self.reduction_factor])
+        },
+        "encoder_outputs": encoder_outputs,
+        "encoder_decoder_attention_bias": encoder_decoder_attention_bias
+      }
+
+      state_shape_invariants = {
+        "iteration": tf.TensorShape([]),
+        "inputs": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
+        "finished": tf.TensorShape([None]),
+        "outputs": {
+          "spec": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
+          "post_net_spec": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
+          "alignments": [
+            tf.TensorShape([None, None, None, None, None]),
+          ],
+          "stop_token_logits": tf.TensorShape([None, None, 1 * self.reduction_factor]),
+          "lengths": tf.TensorShape([None]),
+          "mag_spec": tf.TensorShape([None, None, None])
+        },
+        "encoder_outputs": encoder_outputs.shape,
+        "encoder_decoder_attention_bias": encoder_decoder_attention_bias.shape
+      }
+
+      return state, state_shape_invariants
+
+  def _inference_cond(self, state):
+    with tf.variable_scope("inference_cond"):
+      all_finished = math_ops.reduce_all(state["finished"])
+      return tf.logical_not(all_finished)
+
+  def _inference_step(self, state):
+    decoder_inputs = state["inputs"]
+    encoder_outputs = state["encoder_outputs"]
+    enc_dec_attention_bias = state["encoder_decoder_attention_bias"]
+
+    outputs = self._decode_pass(
+      decoder_inputs=decoder_inputs,
+      encoder_outputs=encoder_outputs,
+      enc_dec_attention_bias=enc_dec_attention_bias,
+    )
+
+    with tf.variable_scope("inference_step"):
+      # We don't have post-net, thus spec = post_net_spec
+      next_inputs = outputs["post_net_spec"][:, -1:, :]
+
+      # Set zero if sequence is finished
+      next_inputs = tf.where(state["finished"], tf.zeros_like(next_inputs), next_inputs)
+      next_inputs = tf.concat([decoder_inputs, next_inputs], 1)
+
+      # Update lengths
+      lengths = state["outputs"]["lengths"]
+      lengths = tf.where(state["finished"], lengths, lengths + 1 * self.reduction_factor)
+      outputs["lengths"] = lengths
+
+      # Update spec, post_net_spec and mag_spec
+      for key in ["spec", "post_net_spec", "mag_spec"]:
+        output = outputs[key][:, -1:, :]
+        output = tf.where(state["finished"], tf.zeros_like(output), output)
+        outputs[key] = tf.concat([state["outputs"][key], output], 1)
+
+      # Update stop token logits
+      stop_token_logits = outputs["stop_token_logits"][:, -1:, :]
+      stop_token_logits = tf.where(
+        state["finished"],
+        tf.zeros_like(stop_token_logits),
+        stop_token_logits
+      )
+      stop_prediction = tf.sigmoid(stop_token_logits)
+      stop_prediction = tf.reduce_max(stop_prediction, axis=-1)
+
+      # TODO: uncomment next line if you want to use stop token predictions
+      # finished = tf.reshape(tf.cast(tf.round(stop_prediction), tf.bool), [-1])
+      finished = tf.reshape(tf.cast(tf.round(tf.zeros_like(stop_prediction)), tf.bool), [-1])
+
+      stop_token_logits = tf.concat([state["outputs"]["stop_token_logits"], stop_token_logits], 1)
+      outputs["stop_token_logits"] = stop_token_logits
+
+      with tf.variable_scope("alignments"):
+        forward = "ForwardPass" if self.mode == "infer" else "ForwardPass_1"
+        op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/attention_weights"
+        weights_operation = tf.get_default_graph().get_operation_by_name(op)
+        weight = weights_operation.values()[0]
+        weight = tf.expand_dims(weight, 0)
+        outputs["alignments"] = [weight]
+
+      state["iteration"] = state["iteration"] + 1
+      state["inputs"] = next_inputs
+      state["finished"] = finished
+      state["outputs"] = outputs
+
+    return state
 
   @staticmethod
   def _collapse(values, last_dim, reduction_factor):
@@ -333,3 +456,19 @@ class ConvTTSDecoder(Decoder):
     position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), dtype)
     position_encoding = position_encoding[:, :features_count]
     return position_encoding
+
+  @staticmethod
+  def _convert_outputs(outputs, reduction_factor, batch_size):
+    with tf.variable_scope("output_converter"):
+      for key in ["spec", "post_net_spec", "stop_token_logits", "mag_spec"]:
+        outputs[key] = ConvTTSDecoder._extend(outputs[key], reduction_factor)
+
+      alignments = [[outputs["alignments"][it][:, sample, :, :, :] for it in range(1)] for sample in range(batch_size)]
+
+      return {
+        "outputs": [
+          outputs["spec"], outputs["post_net_spec"], alignments,
+          tf.sigmoid(outputs["stop_token_logits"]), outputs["lengths"], outputs["mag_spec"]
+        ],
+        "stop_token_logits": outputs["stop_token_logits"]
+      }
