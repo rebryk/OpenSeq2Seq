@@ -93,10 +93,10 @@ base_params = {
     "min_lr": 1e-5,
   },
   "dtype": tf.float32,
-  "regularizer": tf.contrib.layers.l2_regularizer,
-  "regularizer_params": {
-    "scale": 1e-6
-  },
+  # "regularizer": tf.contrib.layers.l2_regularizer,
+  # "regularizer_params": {
+  #   "scale": 1e-6
+  # },
   "initializer": tf.contrib.layers.xavier_initializer,
 
   "summaries": ["learning_rate", "variables", "gradients", "larc_summaries",
@@ -139,14 +139,22 @@ base_params = {
     "reduction_factor": reduction_factor,
     "prenet_layers": 2,
     "prenet_hidden_size": decoder_hidden_size,
-    "cnn_dropout_prob": 0.5,
-    "conv_layers": [
-      {
-        "kernel_size": [3], "stride": [1],
-        "num_channels": decoder_hidden_size, "padding": "VALID",
-        "activation_fn": tf.nn.relu
-      }
-    ] * 34,
+    "cnn_dropout_prob": 0.1,
+    "conv_layers":
+      [
+        {
+          "kernel_size": [3], "stride": [1],
+          "num_channels": decoder_hidden_size, "padding": "VALID",
+          "activation_fn": tf.nn.relu
+        }
+      ] +
+      [
+        {
+          "kernel_size": [3], "stride": [1],
+          "num_channels": decoder_hidden_size, "padding": "SAME",
+          "activation_fn": tf.nn.relu
+        }
+      ] * 7,
     "attention_dropout": 0.1,
     "layer_postprocess_dropout": 0.1
   },
