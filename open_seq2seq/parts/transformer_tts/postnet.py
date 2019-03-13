@@ -35,7 +35,8 @@ class Postnet:
           ch_out = self.num_audio_features
 
       # Add padding to the left side to avoid looking to the future
-      top_layer = tf.pad(top_layer, [[0, 0], [kernel_size[0] - 1, 0], [0, 0]])
+      if i == 0:
+        top_layer = tf.pad(top_layer, [[0, 0], [kernel_size[0] - 1, 0], [0, 0]])
 
       top_layer = conv_bn_actv(
         layer_type="conv1d",
@@ -68,9 +69,6 @@ class MagSpecPostnet:
   def __call__(self, spectrogram_prediction):
     mag_spec_prediction = spectrogram_prediction
 
-    # Add padding to the left side to avoid looking to the future
-    mag_spec_prediction = tf.pad(mag_spec_prediction, [[0, 0], [3, 0], [0, 0]])
-
     mag_spec_prediction = conv_bn_actv(
       layer_type="conv1d",
       name="conv_0",
@@ -79,16 +77,13 @@ class MagSpecPostnet:
       kernel_size=4,
       activation_fn=tf.nn.relu,
       strides=1,
-      padding="VALID",
+      padding="SAME",
       regularizer=self.params.get("regularizer", None),
       training=self.training,
       data_format=self.params.get("postnet_data_format", "channels_last"),
       bn_momentum=self.params.get("postnet_bn_momentum", 0.1),
       bn_epsilon=self.params.get("postnet_bn_epsilon", 1e-5),
     )
-
-    # Add padding to the left side to avoid looking to the future
-    mag_spec_prediction = tf.pad(mag_spec_prediction, [[0, 0], [3, 0], [0, 0]])
 
     mag_spec_prediction = conv_bn_actv(
       layer_type="conv1d",
@@ -98,7 +93,7 @@ class MagSpecPostnet:
       kernel_size=4,
       activation_fn=tf.nn.relu,
       strides=1,
-      padding="VALID",
+      padding="SAME",
       regularizer=self.params.get("regularizer", None),
       training=self.training,
       data_format=self.params.get("postnet_data_format", "channels_last"),
