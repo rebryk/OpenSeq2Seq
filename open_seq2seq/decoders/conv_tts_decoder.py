@@ -5,6 +5,7 @@ from open_seq2seq.encoders.conv_tts_encoder import ConvBlock
 from open_seq2seq.parts.transformer import attention_layer
 from open_seq2seq.parts.transformer import utils
 from open_seq2seq.parts.transformer.common import PrePostProcessingWrapper, LayerNormalization
+from open_seq2seq.parts.transformer.ffn_layer import FeedFowardNetwork
 from .decoder import Decoder
 
 
@@ -34,21 +35,13 @@ class Prenet:
       )
       self.layers.append(layer)
 
-    self.linear_projection = tf.layers.Dense(
-      name="linear_projection",
-      units=hidden_size,
-      use_bias=False,
-      kernel_regularizer=regularizer,
-      dtype=dtype
-    )
-
   def __call__(self, x):
     # TODO: do we need to use dropout here?
     with tf.variable_scope(self.name):
       for layer in self.layers:
         x = tf.layers.dropout(layer(x), rate=self.dropout, training=self.training)
 
-      return self.linear_projection(x)
+      return x
 
 
 class AttentionBlock:
@@ -69,11 +62,19 @@ class AttentionBlock:
       train=training
     )
 
-    feed_forward = tf.layers.Dense(
-      units=hidden_size,
-      use_bias=True,
-      kernel_regularizer=regularizer
+    feed_forward = FeedFowardNetwork(
+      hidden_size=hidden_size,
+      filter_size=4 * hidden_size,
+      relu_dropout=0,
+      regularizer=regularizer,
+      train=training
     )
+
+    # feed_forward = tf.layers.Dense(
+    #   units=hidden_size,
+    #   use_bias=True,
+    #   kernel_regularizer=regularizer
+    # )
 
     wrapper_params = {
       "hidden_size": hidden_size,
@@ -120,7 +121,8 @@ class ConvTTSDecoder(Decoder):
       "prenet_layers": int,
       "prenet_hidden_size": int,
       "hidden_size": int,
-      "conv_layers": list,
+      "pre_conv_layers": list,
+      "post_conv_layers": list,
       "attention_dropout": float,
       "layer_postprocess_dropout": float
     })
@@ -153,8 +155,10 @@ class ConvTTSDecoder(Decoder):
 
     self.training = mode == "train"
     self.prenet = None
+    self.pre_conv_layers = []
+    self.linear_projection = None
     self.attention = None
-    self.conv_layers = []
+    self.post_conv_layers = []
     self.stop_token_projection_layer = None
     self.mel_projection_layer = None
 
@@ -176,19 +180,11 @@ class ConvTTSDecoder(Decoder):
       dtype=self._params["dtype"]
     )
 
-    self.attention = AttentionBlock(
-      hidden_size=self._params["hidden_size"],
-      attention_dropout=self._params["attention_dropout"],
-      layer_postprocess_dropout=self._params["layer_postprocess_dropout"],
-      regularizer=regularizer,
-      training=self.training
-    )
-
     cnn_dropout_prob = self._params.get("cnn_dropout_prob", 0.5)
     bn_momentum = self._params.get("bn_momentum", 0.95)
     bn_epsilon = self._params.get("bn_epsilon", -1e8)
 
-    for index, params in enumerate(self._params["conv_layers"]):
+    for index, params in enumerate(self._params["pre_conv_layers"]):
       layer = ConvBlock.create(
         index=index,
         conv_params=params,
@@ -197,9 +193,38 @@ class ConvTTSDecoder(Decoder):
         bn_epsilon=bn_epsilon,
         cnn_dropout_prob=cnn_dropout_prob,
         training=self.training,
-        is_causal=True
+        is_causal=True if index == 0 else False
       )
-      self.conv_layers.append(layer)
+      self.pre_conv_layers.append(layer)
+
+    self.linear_projection = tf.layers.Dense(
+      name="linear_projection",
+      units=self._params["hidden_size"],
+      use_bias=False,
+      kernel_regularizer=regularizer,
+      dtype=self._params["dtype"]
+    )
+
+    self.attention = AttentionBlock(
+      hidden_size=self._params["hidden_size"],
+      attention_dropout=self._params["attention_dropout"],
+      layer_postprocess_dropout=self._params["layer_postprocess_dropout"],
+      regularizer=regularizer,
+      training=self.training
+    )
+
+    for index, params in enumerate(self._params["post_conv_layers"]):
+      layer = ConvBlock.create(
+        index=index,
+        conv_params=params,
+        regularizer=regularizer,
+        bn_momentum=bn_momentum,
+        bn_epsilon=bn_epsilon,
+        cnn_dropout_prob=cnn_dropout_prob,
+        training=self.training,
+        is_causal=True if index == 0 else False
+      )
+      self.post_conv_layers.append(layer)
 
     # TODO: Do we need to use bias?
     self.mel_projection_layer = tf.layers.Dense(
@@ -243,18 +268,25 @@ class ConvTTSDecoder(Decoder):
     return self._infer(encoder_outputs, inputs_attention_bias, spec_length)
 
   def _decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
-    decoder_inputs = self.prenet(decoder_inputs)
+    y = self.prenet(decoder_inputs)
+
+    with tf.variable_scope("pre_conv"):
+      for layer in self.pre_conv_layers:
+        y = layer(y)
+
+    y = self.linear_projection(y)
 
     with tf.variable_scope("decoder_pos_encoding"):
-      decoder_inputs += self._positional_encoding(decoder_inputs, self.params["dtype"])
+      y += self._positional_encoding(y, self.params["dtype"])
 
     with tf.variable_scope("encoder_pos_encoding"):
       encoder_outputs += self._positional_encoding(encoder_outputs, self.params["dtype"])
 
-    y = self.attention(decoder_inputs, encoder_outputs, enc_dec_attention_bias)
+    y = self.attention(y, encoder_outputs, enc_dec_attention_bias)
 
-    for layer in self.conv_layers:
-      y = layer(y)
+    with tf.variable_scope("post_conv"):
+      for layer in self.post_conv_layers:
+        y = layer(y)
 
     with tf.variable_scope("mag_projection"):
       batch_size = tf.shape(y)[0]
