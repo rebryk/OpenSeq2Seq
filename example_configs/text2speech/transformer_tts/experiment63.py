@@ -65,7 +65,7 @@ num_layers = 4
 
 base_params = {
   "random_seed": 0,
-  "use_horovod": False,
+  "use_horovod": True,
   "max_steps": 1000000,
   "bench_start": 0,
 
