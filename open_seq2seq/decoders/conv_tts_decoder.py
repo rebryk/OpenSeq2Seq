@@ -2,7 +2,8 @@ import tensorflow as tf
 from tensorflow.python.ops import math_ops
 
 from open_seq2seq.encoders.conv_tts_encoder import ConvBlock
-from open_seq2seq.parts.transformer import attention_layer
+# from open_seq2seq.parts.transformer import attention_layer
+from open_seq2seq.parts.conv_tts import attention_layer
 from open_seq2seq.parts.transformer import utils
 from open_seq2seq.parts.transformer.common import PrePostProcessingWrapper, LayerNormalization
 from open_seq2seq.parts.transformer.ffn_layer import FeedFowardNetwork
@@ -59,7 +60,9 @@ class AttentionBlock:
       num_heads=1,
       attention_dropout=attention_dropout,
       regularizer=regularizer,
-      train=training
+      train=training,
+      block_length=10,
+      filter_width=10
     )
 
     # feed_forward = FeedFowardNetwork(
@@ -303,10 +306,15 @@ class ConvTTSDecoder(Decoder):
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
 
+    batch_size = tf.shape(y)[0]
+    alignments = []
+    for _ in range(1):
+      alignments.append(tf.zeros([batch_size, batch_size, batch_size, batch_size, batch_size]))
+
     return {
       "spec": mel_spec,
       "post_net_spec": mel_spec,
-      "alignments": None,
+      "alignments": alignments,
       "stop_token_logits": stop_token_logits,
       "lengths": sequence_lengths,
       "mag_spec": mag_spec
@@ -326,12 +334,14 @@ class ConvTTSDecoder(Decoder):
       sequence_lengths=sequence_lengths
     )
 
-    with tf.variable_scope("alignments"):
-      weights = []
-      op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/attention_weights"
-      weights_operation = tf.get_default_graph().get_operation_by_name(op)
-      weights.append(weights_operation.values()[0])
-      outputs["alignments"] = tf.expand_dims(tf.stack(weights), 1)
+    # with tf.variable_scope("alignments"):
+    #   weights = []
+    #   # op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/attention_weights"
+    #   # op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/dot_product_attention/attention_weights"
+    #   op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/local_self_attention_1d/local_1d/attention_weights"
+    #   weights_operation = tf.get_default_graph().get_operation_by_name(op)
+    #   weights.append(weights_operation.values()[0])
+    #   outputs["alignments"] = tf.expand_dims(tf.stack(weights), 1)
 
     return self._convert_outputs(outputs, self.reduction_factor, self._model.params["batch_size_per_gpu"])
 
@@ -453,13 +463,17 @@ class ConvTTSDecoder(Decoder):
       stop_token_logits = tf.concat([state["outputs"]["stop_token_logits"], stop_token_logits], 1)
       outputs["stop_token_logits"] = stop_token_logits
 
-      with tf.variable_scope("alignments"):
-        forward = "ForwardPass" if self.mode == "infer" else "ForwardPass_1"
-        op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/attention_weights"
-        weights_operation = tf.get_default_graph().get_operation_by_name(op)
-        weight = weights_operation.values()[0]
-        weight = tf.expand_dims(weight, 0)
-        outputs["alignments"] = [weight]
+      # with tf.variable_scope("alignments"):
+      #   forward = "ForwardPass" if self.mode == "infer" else "ForwardPass_1"
+      #   # op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/attention_weights"
+      #   # op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/dot_product_attention/attention_weights"
+      #   op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/local_self_attention_1d/local_1d/attention_weights"
+      #   weights_operation = tf.get_default_graph().get_operation_by_name(op)
+      #   weight = weights_operation.values()[0]
+      #   weight = tf.expand_dims(weight, 0)
+      #
+      #   weight = [16,1,1,1,144]
+      #   outputs["alignments"] = [weight]
 
       state["iteration"] = state["iteration"] + 1
       state["inputs"] = next_inputs
