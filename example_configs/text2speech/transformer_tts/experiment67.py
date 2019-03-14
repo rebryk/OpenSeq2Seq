@@ -27,7 +27,7 @@ elif dataset == "LJ":
   mag_num_feats = 513
   train = "train.csv"
   val = "test.csv"
-  batch_size = 64
+  batch_size = 16
 else:
   raise ValueError("Unknown dataset")
 
@@ -51,7 +51,7 @@ elif output_type == "both":
 else:
   raise ValueError("Unknown param for output_type")
 
-num_gpus = 8
+num_gpus = 1
 
 reduction_factor = 8
 encoder_window_size = 2
@@ -65,17 +65,17 @@ num_layers = 4
 
 base_params = {
   "random_seed": 0,
-  "use_horovod": True,
+  "use_horovod": False,
   "max_steps": 1000000,
   "bench_start": 0,
 
   "num_gpus": num_gpus,
   "batch_size_per_gpu": batch_size,
 
-  "save_summaries_steps": 1000,
-  "print_loss_steps": 1000,
-  "print_samples_steps": 1000,
-  "eval_steps": 5000,
+  "save_summaries_steps": 100,
+  "print_loss_steps": 100,
+  "print_samples_steps": 100,
+  "eval_steps": 500,
   "save_checkpoint_steps": 5000,
   "save_to_tensorboard": True,
   "logdir": "result/transformer-LJ-float-67",
