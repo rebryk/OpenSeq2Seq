@@ -291,14 +291,14 @@ class ConvTTSDecoder(Decoder):
     with tf.variable_scope("mag_projection"):
       batch_size = tf.shape(y)[0]
 
-    if self.n_mag:
-      # TODO: mag spec
-      mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
-    else:
-      mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
+      if self.n_mag:
+        # TODO: mag spec
+        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
+      else:
+        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
 
     mel_spec = self.mel_projection_layer(y)
-    stop_token_logits = self.stop_token_projection_layer(mel_spec)
+    stop_token_logits = self.stop_token_projection_layer(y)
 
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
