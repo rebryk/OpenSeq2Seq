@@ -193,7 +193,7 @@ class ConvTTSDecoder(Decoder):
         bn_epsilon=bn_epsilon,
         cnn_dropout_prob=cnn_dropout_prob,
         training=self.training,
-        is_causal=True # if index == 0 else False
+        is_causal=True if index == 0 else False
       )
       self.pre_conv_layers.append(layer)
 
@@ -222,7 +222,7 @@ class ConvTTSDecoder(Decoder):
         bn_epsilon=bn_epsilon,
         cnn_dropout_prob=cnn_dropout_prob,
         training=self.training,
-        is_causal=True if index == 0 else False
+        is_causal=True # if index == 0 else False
       )
       self.post_conv_layers.append(layer)
 
