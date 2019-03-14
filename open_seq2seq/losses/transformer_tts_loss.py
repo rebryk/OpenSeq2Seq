@@ -30,7 +30,8 @@ class TransformerTTSLoss(Loss):
         "use_mask": bool,
         "scale": float,
         "stop_token_weight": float,
-        "mag_weight": float
+        "mag_weight": float,
+        "l1_norm": bool
     }
 
   def _compute_loss(self, input_dict):
@@ -88,6 +89,11 @@ class TransformerTTSLoss(Loss):
     spec = tf.concat([spec, spec_pad], axis=1)
     stop_token = tf.concat([stop_token, stop_token_pad], axis=1)
 
+    if self.params.get("l1_norm", False):
+      loss_f = tf.losses.absolute_difference
+    else:
+      loss_f = tf.losses.mean_squared_error
+
     if self._both:
       mag_pad = tf.zeros(
           [
@@ -115,15 +121,16 @@ class TransformerTTSLoss(Loss):
         dtype=tf.float32
       )
       spec_mask = tf.expand_dims(spec_mask, axis=-1)
-      decoder_loss = tf.losses.mean_squared_error(
+
+      decoder_loss = loss_f(
           labels=decoder_target, predictions=decoder_predictions, weights=spec_mask
       )
-      post_net_loss = tf.losses.mean_squared_error(
+      post_net_loss = loss_f(
           labels=post_net_target, predictions=post_net_predictions, weights=spec_mask
       )
 
       if self._both:
-        mag_loss = tf.losses.mean_squared_error(labels=mag_target, predictions=mag_pred, weights=spec_mask)
+        mag_loss = loss_f(labels=mag_target, predictions=mag_pred, weights=spec_mask)
 
       stop_token_mask = tf.sequence_mask(lengths=spec_lengths, maxlen=max_length, dtype=tf.float32)
       stop_token_mask = tf.expand_dims(stop_token_mask, axis=-1)
@@ -133,14 +140,14 @@ class TransformerTTSLoss(Loss):
       stop_token_loss = stop_token_loss * stop_token_mask
       stop_token_loss = tf.reduce_sum(stop_token_loss) / tf.reduce_sum(stop_token_mask)
     else:
-      decoder_loss = tf.losses.mean_squared_error(
+      decoder_loss = loss_f(
           labels=decoder_target, predictions=decoder_predictions
       )
-      post_net_loss = tf.losses.mean_squared_error(
+      post_net_loss = loss_f(
           labels=post_net_target, predictions=post_net_predictions
       )
       if self._both:
-        mag_loss = tf.losses.mean_squared_error(
+        mag_loss = loss_f(
            labels=mag_target, predictions=mag_pred
         )
       stop_token_loss = tf.nn.sigmoid_cross_entropy_with_logits(
