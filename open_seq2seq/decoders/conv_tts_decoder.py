@@ -62,19 +62,19 @@ class AttentionBlock:
       train=training
     )
 
-    feed_forward = FeedFowardNetwork(
-      hidden_size=hidden_size,
-      filter_size=4 * hidden_size,
-      relu_dropout=0,
-      regularizer=regularizer,
-      train=training
-    )
-
-    # feed_forward = tf.layers.Dense(
-    #   units=hidden_size,
-    #   use_bias=True,
-    #   kernel_regularizer=regularizer
+    # feed_forward = FeedFowardNetwork(
+    #   hidden_size=hidden_size,
+    #   filter_size=4 * hidden_size,
+    #   relu_dropout=0,
+    #   regularizer=regularizer,
+    #   train=training
     # )
+
+    feed_forward = tf.layers.Dense(
+      units=hidden_size,
+      use_bias=True,
+      kernel_regularizer=regularizer
+    )
 
     wrapper_params = {
       "hidden_size": hidden_size,
