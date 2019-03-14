@@ -298,7 +298,7 @@ class ConvTTSDecoder(Decoder):
       mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
 
     mel_spec = self.mel_projection_layer(y)
-    stop_token_logits = self.stop_token_projection_layer(y)
+    stop_token_logits = self.stop_token_projection_layer(mel_spec)
 
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
