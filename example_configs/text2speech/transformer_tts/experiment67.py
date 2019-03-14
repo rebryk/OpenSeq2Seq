@@ -78,7 +78,7 @@ base_params = {
   "eval_steps": 5000,
   "save_checkpoint_steps": 5000,
   "save_to_tensorboard": True,
-  "logdir": "result/transformer-LJ-float-66",
+  "logdir": "result/transformer-LJ-float-67",
   "max_grad_norm": 1.,
 
   "optimizer": "Adam",
@@ -148,14 +148,7 @@ base_params = {
           "num_channels": decoder_hidden_size, "padding": "VALID",
           "activation_fn": tf.nn.relu
         }
-      ] +
-      [
-        {
-          "kernel_size": [3], "stride": [1],
-          "num_channels": decoder_hidden_size, "padding": "SAME",
-          "activation_fn": tf.nn.relu
-        }
-      ] * 3,
+      ] * 4,
     "attention_dropout": 0.1,
     "layer_postprocess_dropout": 0.1
   },
