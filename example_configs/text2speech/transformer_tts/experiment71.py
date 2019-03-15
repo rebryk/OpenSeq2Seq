@@ -145,8 +145,11 @@ base_params = {
     "post_conv_layers":
       [
         {
-          "kernel_size": [3], "stride": [1],
-          "num_channels": decoder_hidden_size, "padding": "VALID",
+          "kernel_size": [3],
+          "stride": [1],
+          "num_channels": decoder_hidden_size,
+          "padding": "VALID",
+          "is_causal": True,
           "activation_fn": tf.nn.relu
         }
       ] * 4,
