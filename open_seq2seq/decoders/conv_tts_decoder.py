@@ -192,8 +192,7 @@ class ConvTTSDecoder(Decoder):
         bn_momentum=bn_momentum,
         bn_epsilon=bn_epsilon,
         cnn_dropout_prob=cnn_dropout_prob,
-        training=self.training,
-        is_causal=True if index == 0 else False
+        training=self.training
       )
       self.pre_conv_layers.append(layer)
 
@@ -221,8 +220,7 @@ class ConvTTSDecoder(Decoder):
         bn_momentum=bn_momentum,
         bn_epsilon=bn_epsilon,
         cnn_dropout_prob=cnn_dropout_prob,
-        training=self.training,
-        is_causal=True # if index == 0 else False
+        training=self.training
       )
       self.post_conv_layers.append(layer)
 
@@ -268,6 +266,12 @@ class ConvTTSDecoder(Decoder):
     return self._infer(encoder_outputs, inputs_attention_bias, spec_length)
 
   def _decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
+    # TODO: simplify
+    # shape = tf.shape(decoder_inputs)
+    # decoder_inputs = tf.Print(decoder_inputs, [tf.shape(decoder_inputs)], summarize=10)
+    # y = tf.reshape(decoder_inputs, [shape[0], shape[1] * self.reduction_factor, self.n_mel])
+    # y = self.prenet(y)
+    # y = self._collapse(y, self.n_mel, self.reduction_factor)
     y = self.prenet(decoder_inputs)
 
     with tf.variable_scope("pre_conv"):
