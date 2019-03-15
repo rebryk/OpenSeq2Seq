@@ -140,6 +140,7 @@ class ConvTTSDecoder(Decoder):
     return dict(Decoder.get_optional_params(), **{
       "prenet_activation_fn": None,
       "prenet_dropout": float,
+      "prenet_use_inference_dropout": bool,
       "cnn_dropout_prob": float,
       "bn_momentum": float,
       "bn_epsilon": float,
@@ -176,7 +177,7 @@ class ConvTTSDecoder(Decoder):
       activation_fn=self._params.get("prenet_activation_fn", tf.nn.relu),
       dropout=self._params.get("prenet_dropout", 0.5),
       regularizer=regularizer,
-      training=self.training,
+      training=self.training or self._params.get("prenet_use_inference_dropout", False),
       dtype=self._params["dtype"]
     )
 
