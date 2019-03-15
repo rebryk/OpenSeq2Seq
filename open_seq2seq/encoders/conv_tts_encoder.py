@@ -84,8 +84,11 @@ class ConvBlock:
       rate=cnn_dropout_prob
     )
 
-    if conv_params.get("is_causal", False):
-      is_causal = True
+    if "is_causal" in conv_params:
+      is_causal = conv_params["is_causal"]
+
+    if "is_residual" in conv_params:
+      is_residual = conv_params["is_residual"]
 
     return ConvBlock("layer_%d" % index, conv, norm, activation_fn, dropout, training, is_residual, is_causal)
 
