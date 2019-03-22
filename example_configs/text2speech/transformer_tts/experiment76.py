@@ -51,7 +51,9 @@ elif output_type == "both":
 else:
   raise ValueError("Unknown param for output_type")
 
-num_gpus = 8
+debug = False
+
+num_gpus = 8 if not debug else 1
 
 reduction_factor = 8
 encoder_window_size = 2
@@ -65,7 +67,7 @@ num_layers = 4
 
 base_params = {
   "random_seed": 0,
-  "use_horovod": True,
+  "use_horovod": True if not debug else False,
   "max_steps": 1000000,
   "bench_start": 0,
 
