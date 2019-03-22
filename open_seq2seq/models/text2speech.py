@@ -209,6 +209,19 @@ class Text2Speech(EncoderDecoderModel):
     super(Text2Speech, self).__init__(params, mode=mode, hvd=hvd)
     self._save_to_tensorboard = self.params["save_to_tensorboard"]
 
+  def _local_to_global(self, values):
+    # [block, step, memory]
+    n_blocks = values.shape[0]
+    n_steps = values.shape[1]
+    n_memory = values.shape[2]
+
+    result = np.zeros([n_blocks * n_steps, n_blocks * n_steps + n_memory - n_steps])
+
+    for i, block in enumerate(values):
+      result[i * n_steps : (i + 1) * n_steps, i * n_steps : i * n_steps + n_memory] = block
+
+    return result
+
   def _get_alignments(self, attention_mask, modes, max_heads=3):
     # alignments_name = ["enc_self_alignment", "dec_self_alignment", "dec_encdec_alignment"]
     alignments_name = ["dec_self_alignment", "dec_encdec_alignment"]
@@ -232,7 +245,13 @@ class Text2Speech(EncoderDecoderModel):
 
       for layer in layers:
         for head in range(alignment.shape[1])[:max_heads]:
-          specs.append(alignment[layer][head])
+          values = alignment[layer][head]
+
+          # If it's local alignment, convert it to the global one
+          if len(values.shape) == 3:
+            values = self._local_to_global(values)
+
+          specs.append(values)
           titles.append("{}_layer_{}_head_{}".format(name, layer, head))
 
     return specs, titles

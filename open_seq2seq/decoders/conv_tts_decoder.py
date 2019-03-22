@@ -61,8 +61,8 @@ class AttentionBlock:
       attention_dropout=attention_dropout,
       regularizer=regularizer,
       train=training,
-      block_length=2,
-      filter_width=2
+      block_length=1,
+      filter_width=20
     )
 
     # feed_forward = FeedFowardNetwork(
@@ -338,13 +338,12 @@ class ConvTTSDecoder(Decoder):
       weights = []
       # op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/attention_weights"
       # op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/dot_product_attention/attention_weights"
-      # op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/local_self_attention_1d/local_1d/attention_weights"
-      # weights_operation = tf.get_default_graph().get_operation_by_name(op)
-      # weight = weights_operation.values()[0]
-      # sz = tf.shape(decoder_inputs)
-      # weight = tf.reshape(weight, [sz[0], 1, sz[1], -1])
-      # weights.append(weight)
-      # outputs["alignments"] = tf.expand_dims(tf.stack(weights), 1)
+      op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/local_self_attention_1d/local_1d/attention_weights"
+      weights_operation = tf.get_default_graph().get_operation_by_name(op)
+      weight = weights_operation.values()[0]
+      weights.append(weight)
+
+      outputs["alignments"] = [tf.stack(weights)]
 
     return self._convert_outputs(outputs, self.reduction_factor, self._model.params["batch_size_per_gpu"])
 
@@ -384,7 +383,7 @@ class ConvTTSDecoder(Decoder):
           "spec": tf.zeros([batch_size, 0, self.n_mel * self.reduction_factor]),
           "post_net_spec": tf.zeros([batch_size, 0, self.n_mel * self.reduction_factor]),
           "alignments": [
-            tf.zeros([0, 0, 0, 0, 0])
+            tf.zeros([0, 0, 0, 0, 0, 0])
           ],
           "stop_token_logits": tf.zeros([batch_size, 0, 1 * self.reduction_factor]),
           "lengths": tf.zeros([batch_size], dtype=tf.int32),
@@ -402,7 +401,7 @@ class ConvTTSDecoder(Decoder):
           "spec": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
           "post_net_spec": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
           "alignments": [
-            tf.TensorShape([None, None, None, None, None]),
+            tf.TensorShape([None, None, None, None, None, None]),
           ],
           "stop_token_logits": tf.TensorShape([None, None, 1 * self.reduction_factor]),
           "lengths": tf.TensorShape([None]),
@@ -466,17 +465,17 @@ class ConvTTSDecoder(Decoder):
       stop_token_logits = tf.concat([state["outputs"]["stop_token_logits"], stop_token_logits], 1)
       outputs["stop_token_logits"] = stop_token_logits
 
-      # with tf.variable_scope("alignments"):
-      #   forward = "ForwardPass" if self.mode == "infer" else "ForwardPass_1"
-      #   # op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/attention_weights"
-      #   # op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/dot_product_attention/attention_weights"
-      #   op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/local_self_attention_1d/local_1d/attention_weights"
-      #   weights_operation = tf.get_default_graph().get_operation_by_name(op)
-      #   weight = weights_operation.values()[0]
-      #   weight = tf.expand_dims(weight, 0)
-      #
-      #   weight = [16,1,1,1,144]
-      #   outputs["alignments"] = [weight]
+      with tf.variable_scope("alignments"):
+        weights = []
+        forward = "ForwardPass" if self.mode == "infer" else "ForwardPass_1"
+        # op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/attention_weights"
+        # op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/dot_product_attention/attention_weights"
+        op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/local_self_attention_1d/local_1d/attention_weights"
+        weights_operation = tf.get_default_graph().get_operation_by_name(op)
+        weight = weights_operation.values()[0]
+        weights.append(weight)
+
+        outputs["alignments"] = [tf.stack(weights)]
 
       state["iteration"] = state["iteration"] + 1
       state["inputs"] = next_inputs

@@ -215,14 +215,7 @@ def local_attention_1d(q, k, v, depth, block_length=128, filter_width=100,
     # k = tf.Print(k, [tf.shape(k)], "k: ", summarize=10)
     # v = tf.Print(v, [tf.shape(v)], "v: ", summarize=10)
 
-    # TODO: fix bias
     attention_bias = tf.expand_dims(embedding_to_padding(k) * -1e9, axis=-2)
-    # if bias is not None:
-    #   attention_bias = tf.expand_dims(bias, axis=-2)
-    # else:
-    #   attention_bias = None
-
-    # attention_bias = tf.Print(attention_bias, [tf.shape(attention_bias)], "attention_bias: ", summarize=10)
 
     depth_v = shape_list(v)[-1]
     output = dot_product_attention(
@@ -360,12 +353,24 @@ class Attention(tf.layers.Layer):
     depth = (self.hidden_size // self.num_heads)
 
     if self.block_length is not None:
+      # v = tf.Print(v, [tf.shape(v)], summarize=10, message="v: ")
+      # v = tf.Print(v, [tf.shape(bias)], summarize=10, message="bias1: ")
+
+      bias = tf.squeeze(bias, axis=1)
+      bias = tf.expand_dims(bias, -1)
+      bias = tf.tile(bias, [1, 1, 1, tf.shape(v)[-1]])
+      k = tf.where(bias >= 0, k, tf.zeros_like(k))
+
+      # v = tf.Print(v, [tf.shape(bias)], summarize=10, message="bias2: ")
+      # bias = tf.tile(bias, [1, tf.shape(v)[0], tf.shape(v)[1], 1])
+      # v = tf.where(bias >= 0, v, 0)
+
       attention_output = local_attention_1d(q=q, k=k, v=v,
                                             block_length=self.block_length,
                                             filter_width=self.filter_width,
                                             depth=depth,
                                             dropout_rate=0.0 if not self.train else self.attention_dropout,
-                                            bias=bias)
+                                            bias=None)
     else: # Regular attention
       if self.mode == "loung":
         attention_output = dot_product_attention(
