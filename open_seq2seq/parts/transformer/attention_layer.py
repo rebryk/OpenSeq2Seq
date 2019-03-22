@@ -23,6 +23,17 @@ import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import math_ops
+from open_seq2seq.parts.transformer import utils
+
+
+# TODO: move to another place
+def positional_encoding(x, dtype):
+  length = tf.shape(x)[1]
+  features_count = tf.shape(x)[2]
+  features_count_even = features_count if (features_count % 2 == 0) else (features_count + 1)
+  position_encoding = tf.cast(utils.get_position_encoding(length, features_count_even), dtype)
+  position_encoding = position_encoding[:, :features_count]
+  return position_encoding
 
 
 def safe_cumprod(x, *args, **kwargs):
@@ -55,7 +66,8 @@ class Attention(tf.layers.Layer):
       attention_dropout,
       train,
       mode="loung",
-      regularizer=None
+      regularizer=None,
+      pos_encoding=False
   ):
     if hidden_size % num_heads != 0:
       raise ValueError("Hidden size must be evenly divisible by the number of "
@@ -67,6 +79,7 @@ class Attention(tf.layers.Layer):
     self.attention_dropout = attention_dropout
     self.train = train
     self.mode = mode
+    self.pos_encoding = pos_encoding
 
     # Layers for linearly projecting the queries, keys, and values.
     self.q_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="q",
@@ -139,8 +152,16 @@ class Attention(tf.layers.Layer):
     # learned projections. This is in preparation of splitting them into
     # multiple heads. Multi-head attention uses multiple queries, keys, and
     # values rather than regular attention (which uses a single q, k, v).
-    q = self.q_dense_layer(x)
-    k = self.k_dense_layer(y)
+    if self.pos_encoding:
+      q = self.q_dense_layer(positional_encoding(x, x.dtype))
+    else:
+      q = self.q_dense_layer(x)
+
+    if self.pos_encoding:
+      k = self.k_dense_layer(positional_encoding(y, x.dtype))
+    else:
+      k = self.k_dense_layer(y)
+
     v = self.v_dense_layer(y)
 
     if cache is not None:
