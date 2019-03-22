@@ -51,8 +51,23 @@ class AttentionBlock:
                layer_postprocess_dropout,
                training,
                regularizer=None,
+               conv_params=None,
                name="attention_block"):
     self.name = name
+
+    self.conv = None
+
+    if conv_params:
+      self.conv = ConvBlock.create(
+        index=0,
+        conv_params=conv_params,
+        regularizer=regularizer,
+        bn_momentum=0.95,
+        bn_epsilon=1e-8,
+        cnn_dropout_prob=0.5,
+        training=training
+      )
+      self.conv.name = "conv"
 
     attention = attention_layer.Attention(
       hidden_size=hidden_size,
@@ -97,8 +112,13 @@ class AttentionBlock:
 
   def __call__(self, decoder_inputs, encoder_outputs, attention_bias):
     with tf.variable_scope(self.name):
+      y = decoder_inputs
+
+      if self.conv:
+        y = self.conv(y)
+
       with tf.variable_scope("attention"):
-        y = self.attention(decoder_inputs, encoder_outputs, attention_bias)
+        y = self.attention(y, encoder_outputs, attention_bias)
 
       with tf.variable_scope("feed_forward"):
         y = self.feed_forward(y)
@@ -145,7 +165,8 @@ class ConvTTSDecoder(Decoder):
       "bn_momentum": float,
       "bn_epsilon": float,
       "reduction_factor": int,
-      "attention_layers": int
+      "attention_layers": int,
+      "self_attention_conv_params": None
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -207,6 +228,7 @@ class ConvTTSDecoder(Decoder):
     )
 
     n_layers = self._params.get("attention_layers", 1)
+    conv_params = self._params.get("self_attention_conv_params", None)
 
     for index in range(n_layers):
       attention = AttentionBlock(
@@ -215,7 +237,8 @@ class ConvTTSDecoder(Decoder):
         attention_dropout=self._params["attention_dropout"],
         layer_postprocess_dropout=self._params["layer_postprocess_dropout"],
         regularizer=regularizer,
-        training=self.training
+        training=self.training,
+        conv_params=conv_params
       )
       self.attentions.append(attention)
 
