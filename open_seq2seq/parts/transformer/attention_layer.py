@@ -153,12 +153,14 @@ class Attention(tf.layers.Layer):
     # multiple heads. Multi-head attention uses multiple queries, keys, and
     # values rather than regular attention (which uses a single q, k, v).
     if self.pos_encoding:
-      q = self.q_dense_layer(x + positional_encoding(x, x.dtype))
+      with tf.variable_scope("queue_pos_encoding"):
+        q = self.q_dense_layer(x + positional_encoding(x, x.dtype))
     else:
       q = self.q_dense_layer(x)
 
     if self.pos_encoding:
-      k = self.k_dense_layer(y + positional_encoding(y, x.dtype))
+      with tf.variable_scope("key_pos_encoding"):
+        k = self.k_dense_layer(y + positional_encoding(y, x.dtype))
     else:
       k = self.k_dense_layer(y)
 

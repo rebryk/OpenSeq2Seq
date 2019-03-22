@@ -52,6 +52,7 @@ class AttentionBlock:
                training,
                regularizer=None,
                conv_params=None,
+               pos_encoding=False,
                name="attention_block"):
     self.name = name
 
@@ -74,7 +75,8 @@ class AttentionBlock:
       num_heads=1,
       attention_dropout=attention_dropout,
       regularizer=regularizer,
-      train=training
+      train=training,
+      pos_encoding=pos_encoding
     )
 
     # feed_forward = FeedFowardNetwork(
@@ -166,7 +168,8 @@ class ConvTTSDecoder(Decoder):
       "bn_epsilon": float,
       "reduction_factor": int,
       "attention_layers": int,
-      "self_attention_conv_params": None
+      "self_attention_conv_params": None,
+      "attention_pos_encoding": bool
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -181,6 +184,7 @@ class ConvTTSDecoder(Decoder):
     self.pre_conv_layers = []
     self.linear_projection = None
     self.attentions = []
+    self.attention_pos_encoding = self._params.get("attention_pos_encoding", False)
     self.post_conv_layers = []
     self.stop_token_projection_layer = None
     self.mel_projection_layer = None
@@ -238,7 +242,8 @@ class ConvTTSDecoder(Decoder):
         layer_postprocess_dropout=self._params["layer_postprocess_dropout"],
         regularizer=regularizer,
         training=self.training,
-        conv_params=conv_params
+        conv_params=conv_params,
+        pos_encoding=self.attention_pos_encoding
       )
       self.attentions.append(attention)
 
@@ -310,11 +315,13 @@ class ConvTTSDecoder(Decoder):
 
     y = self.linear_projection(y)
 
-    with tf.variable_scope("decoder_pos_encoding"):
-      y += self._positional_encoding(y, self.params["dtype"])
+    if not self.attention_pos_encoding:
+      with tf.variable_scope("decoder_pos_encoding"):
+        y += self._positional_encoding(y, self.params["dtype"])
 
-    with tf.variable_scope("encoder_pos_encoding"):
-      encoder_outputs += self._positional_encoding(encoder_outputs, self.params["dtype"])
+    if not self.attention_pos_encoding:
+      with tf.variable_scope("encoder_pos_encoding"):
+        encoder_outputs += self._positional_encoding(encoder_outputs, self.params["dtype"])
 
     for attention in self.attentions:
       y = attention(y, encoder_outputs, enc_dec_attention_bias)
