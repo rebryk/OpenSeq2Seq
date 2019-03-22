@@ -265,7 +265,7 @@ class Text2Speech(EncoderDecoderModel):
         "post net results"
     ]
 
-    alignment_specs, alignment_titles = self._get_alignments(alignment, ["first", "last"])
+    alignment_specs, alignment_titles = self._get_alignments(alignment, ["all"])
     specs += alignment_specs
     titles += alignment_titles
 
@@ -390,7 +390,7 @@ class Text2Speech(EncoderDecoderModel):
         "post net results"
     ]
 
-    alignment_specs, alignment_titles = self._get_alignments(attention_mask, ["first", "last"])
+    alignment_specs, alignment_titles = self._get_alignments(attention_mask, ["all"])
     specs += alignment_specs
     titles += alignment_titles
 
@@ -507,7 +507,7 @@ class Text2Speech(EncoderDecoderModel):
         titles = ["final spectrogram"]
         audio_length = sequence_lengths[j]
 
-        alignment_specs, alignment_titles = self._get_alignments(attention_mask_sample, ["first", "last"])
+        alignment_specs, alignment_titles = self._get_alignments(attention_mask_sample, ["all"])
         specs += alignment_specs
         titles += alignment_titles
 

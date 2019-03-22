@@ -144,7 +144,8 @@ class ConvTTSDecoder(Decoder):
       "cnn_dropout_prob": float,
       "bn_momentum": float,
       "bn_epsilon": float,
-      "reduction_factor": int
+      "reduction_factor": int,
+      "attention_layers": int
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -158,7 +159,7 @@ class ConvTTSDecoder(Decoder):
     self.prenet = None
     self.pre_conv_layers = []
     self.linear_projection = None
-    self.attention = None
+    self.attentions = []
     self.post_conv_layers = []
     self.stop_token_projection_layer = None
     self.mel_projection_layer = None
@@ -205,13 +206,18 @@ class ConvTTSDecoder(Decoder):
       dtype=self._params["dtype"]
     )
 
-    self.attention = AttentionBlock(
-      hidden_size=self._params["hidden_size"],
-      attention_dropout=self._params["attention_dropout"],
-      layer_postprocess_dropout=self._params["layer_postprocess_dropout"],
-      regularizer=regularizer,
-      training=self.training
-    )
+    n_layers = self._params.get("attention_layers", 1)
+
+    for index in range(n_layers):
+      attention = AttentionBlock(
+        name="attention_block_%d" % index,
+        hidden_size=self._params["hidden_size"],
+        attention_dropout=self._params["attention_dropout"],
+        layer_postprocess_dropout=self._params["layer_postprocess_dropout"],
+        regularizer=regularizer,
+        training=self.training
+      )
+      self.attentions.append(attention)
 
     for index, params in enumerate(self._params["post_conv_layers"]):
       layer = ConvBlock.create(
@@ -287,7 +293,8 @@ class ConvTTSDecoder(Decoder):
     with tf.variable_scope("encoder_pos_encoding"):
       encoder_outputs += self._positional_encoding(encoder_outputs, self.params["dtype"])
 
-    y = self.attention(y, encoder_outputs, enc_dec_attention_bias)
+    for attention in self.attentions:
+      y = attention(y, encoder_outputs, enc_dec_attention_bias)
 
     with tf.variable_scope("post_conv"):
       for layer in self.post_conv_layers:
@@ -333,10 +340,14 @@ class ConvTTSDecoder(Decoder):
 
     with tf.variable_scope("alignments"):
       weights = []
-      op = "ForwardPass/conv_tts_decoder/attention_block/attention/attention/attention_weights"
-      weights_operation = tf.get_default_graph().get_operation_by_name(op)
-      weights.append(weights_operation.values()[0])
-      outputs["alignments"] = tf.expand_dims(tf.stack(weights), 1)
+
+      for index in range(len(self.attentions)):
+        op = "ForwardPass/conv_tts_decoder/attention_block_%d/attention/attention/attention_weights" % index
+        weights_operation = tf.get_default_graph().get_operation_by_name(op)
+        weight = weights_operation.values()[0]
+        weights.append(weight)
+
+      outputs["alignments"] = [tf.stack(weights)]
 
     return self._convert_outputs(outputs, self.reduction_factor, self._model.params["batch_size_per_gpu"])
 
@@ -460,11 +471,15 @@ class ConvTTSDecoder(Decoder):
 
       with tf.variable_scope("alignments"):
         forward = "ForwardPass" if self.mode == "infer" else "ForwardPass_1"
-        op = forward + "/conv_tts_decoder/while/attention_block/attention/attention/attention_weights"
-        weights_operation = tf.get_default_graph().get_operation_by_name(op)
-        weight = weights_operation.values()[0]
-        weight = tf.expand_dims(weight, 0)
-        outputs["alignments"] = [weight]
+        weights = []
+
+        for index in range(len(self.attentions)):
+          op = forward + "/conv_tts_decoder/while/attention_block_%d/attention/attention/attention_weights" % index
+          weights_operation = tf.get_default_graph().get_operation_by_name(op)
+          weight = weights_operation.values()[0]
+          weights.append(weight)
+
+        outputs["alignments"] = [tf.stack(weights)]
 
       state["iteration"] = state["iteration"] + 1
       state["inputs"] = next_inputs
