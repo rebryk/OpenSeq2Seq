@@ -53,6 +53,7 @@ class AttentionBlock:
                regularizer=None,
                conv_params=None,
                pos_encoding=False,
+               n_heads=1,
                name="attention_block"):
     self.name = name
 
@@ -72,7 +73,7 @@ class AttentionBlock:
 
     attention = attention_layer.Attention(
       hidden_size=hidden_size,
-      num_heads=1,
+      num_heads=n_heads,
       attention_dropout=attention_dropout,
       regularizer=regularizer,
       train=training,
@@ -169,7 +170,8 @@ class ConvTTSDecoder(Decoder):
       "reduction_factor": int,
       "attention_layers": int,
       "self_attention_conv_params": None,
-      "attention_pos_encoding": bool
+      "attention_pos_encoding": bool,
+      "attention_heads": int
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -232,6 +234,7 @@ class ConvTTSDecoder(Decoder):
     )
 
     n_layers = self._params.get("attention_layers", 1)
+    n_heads = self._params.get("attention_heads", 1)
     conv_params = self._params.get("self_attention_conv_params", None)
 
     for index in range(n_layers):
@@ -243,7 +246,8 @@ class ConvTTSDecoder(Decoder):
         regularizer=regularizer,
         training=self.training,
         conv_params=conv_params,
-        pos_encoding=self.attention_pos_encoding
+        pos_encoding=self.attention_pos_encoding,
+        n_heads=n_heads
       )
       self.attentions.append(attention)
 
