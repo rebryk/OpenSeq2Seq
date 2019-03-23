@@ -56,7 +56,7 @@ debug = False
 
 num_gpus = 8 if not debug else 1
 
-reduction_factor = 4
+reduction_factor = 2
 encoder_hidden_size = 256
 decoder_hidden_size = 512
 
