@@ -121,7 +121,6 @@ base_params = {
     "output_size": encoder_hidden_size,
     "pad_embeddings_2_eight": True,
     "cnn_dropout_prob": 0.5,
-    "attention_cnn_dropout_prob": 0.25,
     "conv_layers": [
       {
         "kernel_size": [3], "stride": [1],
@@ -157,6 +156,7 @@ base_params = {
       "is_causal": True,
       "activation_fn": tf.nn.relu
     },
+    "attention_cnn_dropout_prob": 0.25,
     "attention_pos_encoding": True,
 
     "hidden_size": decoder_hidden_size,
