@@ -57,6 +57,7 @@ debug = False
 num_gpus = 8 if not debug else 1
 
 reduction_factor = 2
+attention_layers = 4
 encoder_hidden_size = 256
 decoder_hidden_size = 512
 
@@ -146,8 +147,15 @@ base_params = {
 
   "decoder": ConvTTSDecoder,
   "decoder_params": {
-    "attention_layers": 1,
-    "self_attention_conv_params": None,
+    "attention_layers": attention_layers,
+    "self_attention_conv_params": {
+      "kernel_size": [5],
+      "stride": [1],
+      "num_channels": decoder_hidden_size,
+      "padding": "VALID",
+      "is_causal": True,
+      "activation_fn": tf.nn.relu
+    },
     "attention_pos_encoding": True,
 
     "hidden_size": decoder_hidden_size,
