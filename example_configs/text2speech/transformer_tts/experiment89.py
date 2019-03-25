@@ -76,7 +76,7 @@ base_params = {
   "eval_steps": 5000,
   "save_checkpoint_steps": 5000,
   "save_to_tensorboard": True,
-  "logdir": "result/transformer-LJ-float-86",
+  "logdir": "result/transformer-LJ-float-89",
   "max_grad_norm": 1.,
 
   "optimizer": NovoGrad,
