@@ -171,7 +171,8 @@ class ConvTTSDecoder(Decoder):
       "attention_layers": int,
       "self_attention_conv_params": None,
       "attention_pos_encoding": bool,
-      "attention_heads": int
+      "attention_heads": int,
+      "disable_attention": bool
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -187,6 +188,7 @@ class ConvTTSDecoder(Decoder):
     self.linear_projection = None
     self.attentions = []
     self.attention_pos_encoding = self._params.get("attention_pos_encoding", False)
+    self.enable_attention = not self._params.get("disable_attention", False)
     self.post_conv_layers = []
     self.stop_token_projection_layer = None
     self.mel_projection_layer = None
@@ -246,7 +248,7 @@ class ConvTTSDecoder(Decoder):
         regularizer=regularizer,
         training=self.training,
         conv_params=conv_params,
-        pos_encoding=self.attention_pos_encoding,
+        pos_encoding=self.attention_pos_encoding and self.enable_attention,
         n_heads=n_heads
       )
       self.attentions.append(attention)
@@ -319,11 +321,11 @@ class ConvTTSDecoder(Decoder):
 
     y = self.linear_projection(y)
 
-    if not self.attention_pos_encoding:
+    if not self.attention_pos_encoding and self.enable_attention:
       with tf.variable_scope("decoder_pos_encoding"):
         y += self._positional_encoding(y, self.params["dtype"])
 
-    if not self.attention_pos_encoding:
+    if not self.attention_pos_encoding and self.enable_attention:
       with tf.variable_scope("encoder_pos_encoding"):
         encoder_outputs += self._positional_encoding(encoder_outputs, self.params["dtype"])
 
