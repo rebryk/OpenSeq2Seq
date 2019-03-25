@@ -53,6 +53,7 @@ class AttentionBlock:
                regularizer=None,
                conv_params=None,
                pos_encoding=False,
+               filter_size=None,
                n_heads=1,
                name="attention_block"):
     self.name = name
@@ -80,19 +81,20 @@ class AttentionBlock:
       pos_encoding=pos_encoding
     )
 
-    # feed_forward = FeedFowardNetwork(
-    #   hidden_size=hidden_size,
-    #   filter_size=4 * hidden_size,
-    #   relu_dropout=0,
-    #   regularizer=regularizer,
-    #   train=training
-    # )
-
-    feed_forward = tf.layers.Dense(
-      units=hidden_size,
-      use_bias=True,
-      kernel_regularizer=regularizer
-    )
+    if filter_size is not None:
+      feed_forward = FeedFowardNetwork(
+        hidden_size=hidden_size,
+        filter_size=filter_size,
+        relu_dropout=0,
+        regularizer=regularizer,
+        train=training
+      )
+    else:
+      feed_forward = tf.layers.Dense(
+        units=hidden_size,
+        use_bias=True,
+        kernel_regularizer=regularizer
+      )
 
     wrapper_params = {
       "hidden_size": hidden_size,
@@ -172,7 +174,8 @@ class ConvTTSDecoder(Decoder):
       "self_attention_conv_params": None,
       "attention_pos_encoding": bool,
       "attention_heads": int,
-      "disable_attention": bool
+      "disable_attention": bool,
+      "filter_size": int
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -249,6 +252,7 @@ class ConvTTSDecoder(Decoder):
         training=self.training,
         conv_params=conv_params,
         pos_encoding=self.attention_pos_encoding and self.enable_attention,
+        filter_size=self._params.get("filter_size", None),
         n_heads=n_heads
       )
       self.attentions.append(attention)
