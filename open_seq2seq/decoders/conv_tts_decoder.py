@@ -50,6 +50,7 @@ class AttentionBlock:
                attention_dropout,
                layer_postprocess_dropout,
                training,
+               cnn_dropout_prob,
                regularizer=None,
                conv_params=None,
                pos_encoding=False,
@@ -67,7 +68,7 @@ class AttentionBlock:
         regularizer=regularizer,
         bn_momentum=0.95,
         bn_epsilon=1e-8,
-        cnn_dropout_prob=0.5,
+        cnn_dropout_prob=cnn_dropout_prob,
         training=training
       )
       self.conv.name = "conv"
@@ -175,7 +176,8 @@ class ConvTTSDecoder(Decoder):
       "attention_pos_encoding": bool,
       "attention_heads": int,
       "disable_attention": bool,
-      "filter_size": int
+      "filter_size": int,
+      "attention_cnn_dropout_prob": float
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -250,6 +252,7 @@ class ConvTTSDecoder(Decoder):
         layer_postprocess_dropout=self._params["layer_postprocess_dropout"],
         regularizer=regularizer,
         training=self.training,
+        cnn_dropout_prob=self._params.get("attention_cnn_dropout_prob", 0.5),
         conv_params=conv_params,
         pos_encoding=self.attention_pos_encoding and self.enable_attention,
         filter_size=self._params.get("filter_size", None),
