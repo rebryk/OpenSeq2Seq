@@ -52,7 +52,7 @@ elif output_type == "both":
 else:
   raise ValueError("Unknown param for output_type")
 
-debug = True
+debug = False
 
 num_gpus = 8 if not debug else 1
 
