@@ -181,7 +181,8 @@ base_params = {
 
   "loss": TransformerTTSLoss,
   "loss_params": {
-    "use_mask": True
+    "use_mask": True,
+    "l1_norm": True
   },
 
   "data_layer": Text2SpeechDataLayer,
