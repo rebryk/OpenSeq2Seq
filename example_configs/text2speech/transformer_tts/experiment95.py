@@ -151,8 +151,8 @@ base_params = {
       "kernel_size": [3],
       "stride": [1],
       "num_channels": decoder_hidden_size,
-      "padding": "SAME",
-      "is_causal": False,
+      "padding": "VALID",
+      "is_causal": True,
       "activation_fn": tf.nn.relu
     },
     "attention_pos_encoding": False,
