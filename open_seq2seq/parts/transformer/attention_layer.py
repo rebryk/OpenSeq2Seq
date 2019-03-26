@@ -67,7 +67,9 @@ class Attention(tf.layers.Layer):
       train,
       mode="loung",
       regularizer=None,
-      pos_encoding=False
+      pos_encoding=False,
+      window_size=None,
+      back_step_size=None
   ):
     if hidden_size % num_heads != 0:
       raise ValueError("Hidden size must be evenly divisible by the number of "
@@ -80,6 +82,8 @@ class Attention(tf.layers.Layer):
     self.train = train
     self.mode = mode
     self.pos_encoding = pos_encoding
+    self.window_size = window_size
+    self.back_step_size = back_step_size
 
     # Layers for linearly projecting the queries, keys, and values.
     self.q_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="q",
@@ -132,7 +136,7 @@ class Attention(tf.layers.Layer):
       x = tf.transpose(x, [0, 2, 1, 3])  # --> [batch, length, num_heads, depth]
       return tf.reshape(x, [batch_size, length, self.hidden_size])
 
-  def call(self, x, y, bias, cache=None):
+  def call(self, x, y, bias, cache=None, positions=None):
     """Apply attention mechanism to x and y.
 
     Args:
@@ -199,7 +203,28 @@ class Attention(tf.layers.Layer):
         # downcast softmax output
         weights = tf.cast(weights, dtype=dtype)
       else:
+        # Shape: [batch, head, decoder, encoder]
         logits += bias
+
+        # Shape: [batch, head, decoder]
+        if positions is not None and self.window_size is not None:
+          assert self.back_step_size is not None
+
+          max_length = tf.shape(logits)[-1]
+
+          # Allow to make back_step_size steps back
+          positions = tf.maximum(positions - self.back_step_size, tf.zeros_like(positions))
+
+          # Create attention mask
+          mask_large = tf.sequence_mask(positions + self.window_size, maxlen=max_length)
+          mask_large = tf.cast(mask_large, tf.float32)
+          mask_small = tf.sequence_mask(positions, maxlen=max_length)
+          mask_small = tf.cast(mask_small, tf.float32)
+          mask = mask_large - mask_small
+          mask = -1e9 * (1 - mask)
+
+          logits += mask
+
         weights = tf.nn.softmax(logits, name="attention_weights")
 
     elif self.mode == "bahdanau":
