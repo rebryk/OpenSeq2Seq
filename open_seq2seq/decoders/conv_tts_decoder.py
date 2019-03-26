@@ -56,6 +56,8 @@ class AttentionBlock:
                pos_encoding=False,
                filter_size=None,
                n_heads=1,
+               window_size=None,
+               back_step_size=None,
                name="attention_block"):
     self.name = name
 
@@ -79,7 +81,9 @@ class AttentionBlock:
       attention_dropout=attention_dropout,
       regularizer=regularizer,
       train=training,
-      pos_encoding=pos_encoding
+      pos_encoding=pos_encoding,
+      window_size=window_size,
+      back_step_size=back_step_size
     )
 
     if filter_size is not None:
@@ -116,7 +120,7 @@ class AttentionBlock:
 
     self.output_normalization = LayerNormalization(hidden_size)
 
-  def __call__(self, decoder_inputs, encoder_outputs, attention_bias):
+  def __call__(self, decoder_inputs, encoder_outputs, attention_bias, positions=None):
     with tf.variable_scope(self.name):
       y = decoder_inputs
 
@@ -124,7 +128,7 @@ class AttentionBlock:
         y = self.conv(y)
 
       with tf.variable_scope("attention"):
-        y = self.attention(y, encoder_outputs, attention_bias)
+        y = self.attention(y, encoder_outputs, attention_bias, positions=positions)
 
       with tf.variable_scope("feed_forward"):
         y = self.feed_forward(y)
@@ -178,7 +182,9 @@ class ConvTTSDecoder(Decoder):
       "disable_attention": bool,
       "filter_size": int,
       "attention_cnn_dropout_prob": float,
-      "scale_positional_encoding": bool
+      "scale_positional_encoding": bool,
+      "window_size": int,
+      "back_step_size": int
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -258,7 +264,9 @@ class ConvTTSDecoder(Decoder):
         conv_params=conv_params,
         pos_encoding=self.attention_pos_encoding and self.enable_attention,
         filter_size=self._params.get("filter_size", None),
-        n_heads=n_heads
+        n_heads=n_heads,
+        window_size=self._params.get("window_size", None),
+        back_step_size=self._params.get("back_step_size", None)
       )
       self.attentions.append(attention)
 
@@ -315,7 +323,12 @@ class ConvTTSDecoder(Decoder):
 
     return self._infer(encoder_outputs, inputs_attention_bias, spec_length)
 
-  def _decode_pass(self, decoder_inputs, encoder_outputs, enc_dec_attention_bias, sequence_lengths=None):
+  def _decode_pass(self,
+                   decoder_inputs,
+                   encoder_outputs,
+                   enc_dec_attention_bias,
+                   sequence_lengths=None,
+                   alignment_positions=None):
     # TODO: simplify
     # shape = tf.shape(decoder_inputs)
     # decoder_inputs = tf.Print(decoder_inputs, [tf.shape(decoder_inputs)], summarize=10)
@@ -362,8 +375,9 @@ class ConvTTSDecoder(Decoder):
 
         encoder_outputs += pos_encoding
 
-    for attention in self.attentions:
-      y = attention(y, encoder_outputs, enc_dec_attention_bias)
+    for i, attention in enumerate(self.attentions):
+      positions = alignment_positions[i, :, :, :] if alignment_positions is not None else None
+      y = attention(y, encoder_outputs, enc_dec_attention_bias, positions=positions)
 
     with tf.variable_scope("post_conv"):
       for layer in self.post_conv_layers:
@@ -447,11 +461,14 @@ class ConvTTSDecoder(Decoder):
     with tf.variable_scope("inference_initial_state"):
       batch_size = tf.shape(encoder_outputs)[0]
       num_mag_features = self.n_mag or batch_size
+      n_layers = self._params.get("attention_layers", 1)
+      n_heads = self._params.get("attention_heads", 1)
 
       state = {
         "iteration": tf.constant(0),
         "inputs": tf.zeros([batch_size, 1, self.n_mel * self.reduction_factor]),
         "finished": tf.cast(tf.zeros([batch_size]), tf.bool),
+        "alignment_positions": tf.zeros([n_layers, batch_size, n_heads, 1], dtype=tf.int32),
         "outputs": {
           "spec": tf.zeros([batch_size, 0, self.n_mel * self.reduction_factor]),
           "post_net_spec": tf.zeros([batch_size, 0, self.n_mel * self.reduction_factor]),
@@ -470,6 +487,7 @@ class ConvTTSDecoder(Decoder):
         "iteration": tf.TensorShape([]),
         "inputs": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
         "finished": tf.TensorShape([None]),
+        "alignment_positions": tf.TensorShape([n_layers, None, n_heads, None]),
         "outputs": {
           "spec": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
           "post_net_spec": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
@@ -495,11 +513,13 @@ class ConvTTSDecoder(Decoder):
     decoder_inputs = state["inputs"]
     encoder_outputs = state["encoder_outputs"]
     enc_dec_attention_bias = state["encoder_decoder_attention_bias"]
+    alignment_positions = state["alignment_positions"]
 
     outputs = self._decode_pass(
       decoder_inputs=decoder_inputs,
       encoder_outputs=encoder_outputs,
       enc_dec_attention_bias=enc_dec_attention_bias,
+      alignment_positions=alignment_positions
     )
 
     with tf.variable_scope("inference_step"):
@@ -548,7 +568,11 @@ class ConvTTSDecoder(Decoder):
           weight = weights_operation.values()[0]
           weights.append(weight)
 
-        outputs["alignments"] = [tf.stack(weights)]
+        weights = tf.stack(weights)
+        outputs["alignments"] = [weights]
+
+      alignment_positions = tf.argmax(weights, axis=-1, output_type=tf.int32)[:, :, :, -1:]
+      state["alignment_positions"] = tf.concat([state["alignment_positions"], alignment_positions], axis=-1)
 
       state["iteration"] = state["iteration"] + 1
       state["inputs"] = next_inputs
