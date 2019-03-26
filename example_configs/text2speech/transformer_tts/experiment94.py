@@ -155,7 +155,7 @@ base_params = {
       "is_causal": True,
       "activation_fn": tf.nn.relu
     },
-    "attention_pos_encoding": True,
+    "attention_pos_encoding": False,
 
     "hidden_size": decoder_hidden_size,
     "reduction_factor": reduction_factor,
