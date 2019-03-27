@@ -190,7 +190,7 @@ class ConvTTSDecoder(Decoder):
       "window_size": int,
       "back_step_size": int,
       "train_window_size": int,
-      "train_window_speed": int
+      "train_window_speed": float
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):

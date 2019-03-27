@@ -214,7 +214,9 @@ class Attention(tf.layers.Layer):
           decoder_length = tf.shape(logits)[2]
           encoder_length = tf.shape(logits)[3]
 
-          positions = self.train_window_speed * (tf.cumsum(tf.ones(decoder_length, dtype=tf.int32)) - 1)
+          positions = self.train_window_speed * tf.cumsum(tf.ones(decoder_length, dtype=tf.int32) - 1)
+          positions = tf.cast(positions, dtype=tf.int32)
+
           mask_large = tf.sequence_mask(positions + self.train_window_size, maxlen=encoder_length)
           mask_large = tf.cast(mask_large, tf.float32)
 
