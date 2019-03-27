@@ -27,8 +27,8 @@ elif dataset == "LJ":
   trim = False
   mag_num_feats = 513
   train = "train.csv"
-  val = "test.csv"
-  batch_size = 32
+  val = "train.csv"
+  batch_size = 64
 else:
   raise ValueError("Unknown dataset")
 
@@ -57,7 +57,7 @@ debug = False
 num_gpus = 8 if not debug else 1
 
 reduction_factor = 2
-attention_layers = 2
+attention_layers = 4
 encoder_hidden_size = 256
 decoder_hidden_size = 512
 
@@ -148,14 +148,13 @@ base_params = {
   "decoder_params": {
     "attention_layers": attention_layers,
     "self_attention_conv_params": {
-      "kernel_size": [3],
+      "kernel_size": [5],
       "stride": [1],
       "num_channels": decoder_hidden_size,
       "padding": "VALID",
       "is_causal": True,
       "activation_fn": tf.nn.relu
     },
-    "attention_pos_encoding": False,
 
     "hidden_size": decoder_hidden_size,
     "reduction_factor": reduction_factor,
@@ -181,8 +180,7 @@ base_params = {
 
   "loss": TransformerTTSLoss,
   "loss_params": {
-    "use_mask": True,
-    "l1_norm": True
+    "use_mask": True
   },
 
   "data_layer": Text2SpeechDataLayer,
