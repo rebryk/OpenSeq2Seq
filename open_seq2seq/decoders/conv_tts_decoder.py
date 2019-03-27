@@ -127,10 +127,6 @@ class AttentionBlock:
       if self.conv:
         y = self.conv(y)
 
-      cnt = tf.ones([1, tf.shape(y)[1], 1], dtype=tf.float32)
-      cnt = tf.cumsum(cnt, axis=1)
-      y = tf.cumsum(y, axis=1) / cnt
-
       with tf.variable_scope("attention"):
         y = self.attention(y, encoder_outputs, attention_bias, positions=positions)
 
