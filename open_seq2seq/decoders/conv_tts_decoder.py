@@ -58,6 +58,8 @@ class AttentionBlock:
                n_heads=1,
                window_size=None,
                back_step_size=None,
+               train_window_size=None,
+               train_window_speed=None,
                name="attention_block"):
     self.name = name
 
@@ -83,7 +85,9 @@ class AttentionBlock:
       train=training,
       pos_encoding=pos_encoding,
       window_size=window_size,
-      back_step_size=back_step_size
+      back_step_size=back_step_size,
+      train_window_size=train_window_size,
+      train_window_speed=train_window_speed
     )
 
     if filter_size is not None:
@@ -184,7 +188,9 @@ class ConvTTSDecoder(Decoder):
       "attention_cnn_dropout_prob": float,
       "scale_positional_encoding": bool,
       "window_size": int,
-      "back_step_size": int
+      "back_step_size": int,
+      "train_window_size": int,
+      "train_window_speed": int
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -266,7 +272,9 @@ class ConvTTSDecoder(Decoder):
         filter_size=self._params.get("filter_size", None),
         n_heads=n_heads,
         window_size=self._params.get("window_size", None),
-        back_step_size=self._params.get("back_step_size", None)
+        back_step_size=self._params.get("back_step_size", None),
+        train_window_size=self._params.get("train_window_size", None),
+        train_window_speed=self._params.get("train_window_speed", None)
       )
       self.attentions.append(attention)
 

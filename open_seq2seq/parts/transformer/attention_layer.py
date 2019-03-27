@@ -69,7 +69,9 @@ class Attention(tf.layers.Layer):
       regularizer=None,
       pos_encoding=False,
       window_size=None,
-      back_step_size=None
+      back_step_size=None,
+      train_window_size=None,
+      train_window_speed=None
   ):
     if hidden_size % num_heads != 0:
       raise ValueError("Hidden size must be evenly divisible by the number of "
@@ -84,6 +86,8 @@ class Attention(tf.layers.Layer):
     self.pos_encoding = pos_encoding
     self.window_size = window_size
     self.back_step_size = back_step_size
+    self.train_window_size = train_window_size
+    self.train_window_speed = train_window_speed
 
     # Layers for linearly projecting the queries, keys, and values.
     self.q_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="q",
@@ -205,6 +209,23 @@ class Attention(tf.layers.Layer):
       else:
         # Shape: [batch, head, decoder, encoder]
         logits += bias
+
+        if self.train and self.train_window_size:
+          decoder_length = tf.shape(logits)[2]
+          encoder_length = tf.shape(logits)[3]
+
+          positions = self.train_window_speed * (tf.cumsum(tf.ones(decoder_length, dtype=tf.int32)) - 1)
+          mask_large = tf.sequence_mask(positions + self.train_window_size, maxlen=encoder_length)
+          mask_large = tf.cast(mask_large, tf.float32)
+
+          mask_small = tf.sequence_mask(tf.maximum(positions - self.train_window_size, 0), maxlen=encoder_length)
+          mask_small = tf.cast(mask_small, tf.float32)
+
+          mask = mask_large - mask_small
+          mask = -1e9 * (1 - mask)
+          mask = tf.reshape(mask, [1, 1, decoder_length, encoder_length])
+
+          logits += mask
 
         # Shape: [batch, head, decoder]
         if positions is not None and self.window_size is not None:
