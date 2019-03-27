@@ -27,7 +27,7 @@ elif dataset == "LJ":
   trim = False
   mag_num_feats = 513
   train = "train.csv"
-  val = "train.csv"
+  val = "test.csv"
   batch_size = 64
 else:
   raise ValueError("Unknown dataset")
@@ -159,8 +159,8 @@ base_params = {
 
     "window_size": 3,
     "back_step_size": 0,
-    "train_window_size": 15,
-    "train_window_speed": 2,
+    "train_window_size": 20,
+    "train_window_speed": 1,
 
     "hidden_size": decoder_hidden_size,
     "reduction_factor": reduction_factor,
