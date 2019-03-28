@@ -79,31 +79,31 @@ base_params = {
   "logdir": "result/transformer-LJ-float-104",
   "max_grad_norm": 1.,
 
-  "optimizer": NovoGrad,
-  "optimizer_params": {
-    "beta1": 0.95,
-    "beta2": 0.98,
-    "epsilon": 1e-08,
-    "weight_decay": 0.001,
-
-  },
-  "lr_policy": poly_decay,  # fixed_lr,
-  "lr_policy_params": {
-    "learning_rate": 0.02,  #
-    "power": 2.0,
-    # "warmup_steps": 200,
-  },
-  # "optimizer": "Adam",
-  # "optimizer_params": {},
-  # "lr_policy": exp_decay,
-  # "lr_policy_params": {
-  #   "learning_rate": 1e-3,
-  #   "decay_steps": 20000,
-  #   "decay_rate": 0.1,
-  #   "use_staircase_decay": False,
-  #   "begin_decay_at": 45000,
-  #   "min_lr": 1e-5,
+  # "optimizer": NovoGrad,
+  # "optimizer_params": {
+  #   "beta1": 0.95,
+  #   "beta2": 0.98,
+  #   "epsilon": 1e-08,
+  #   "weight_decay": 0.001,
+  #
   # },
+  # "lr_policy": poly_decay,  # fixed_lr,
+  # "lr_policy_params": {
+  #   "learning_rate": 0.02,  #
+  #   "power": 2.0,
+  #   # "warmup_steps": 200,
+  # },
+  "optimizer": "Adam",
+  "optimizer_params": {},
+  "lr_policy": exp_decay,
+  "lr_policy_params": {
+    "learning_rate": 1e-3,
+    "decay_steps": 20000,
+    "decay_rate": 0.1,
+    "use_staircase_decay": False,
+    "begin_decay_at": 45000,
+    "min_lr": 1e-5,
+  },
   "dtype": tf.float32,
   # "regularizer": tf.contrib.layers.l2_regularizer,
   # "regularizer_params": {
