@@ -207,8 +207,10 @@ class Attention(tf.layers.Layer):
         # downcast softmax output
         weights = tf.cast(weights, dtype=dtype)
       else:
-        # Shape: [batch, head, decoder, encoder]
-        logits += bias
+        # Logits shape: [batch, head, decoder, encoder]
+        # Bias shape:   [batch, 1, 1, encoder]
+        
+        batch_size = tf.shape(logits)[0]
 
         if self.train and self.train_window_size > 0.0:
           decoder_length = tf.shape(logits)[2]
@@ -226,8 +228,9 @@ class Attention(tf.layers.Layer):
           mask = mask_large - mask_small
           mask = -1e9 * (1 - mask)
           mask = tf.reshape(mask, [1, 1, decoder_length, encoder_length])
+          mask = tf.tile(mask, [batch_size, 1, 1, 1])
 
-          logits += mask
+          bias = mask + bias
 
         # Shape: [batch, head, decoder]
         if positions is not None and self.window_size is not None:
@@ -245,9 +248,13 @@ class Attention(tf.layers.Layer):
           mask_small = tf.cast(mask_small, tf.float32)
           mask = mask_large - mask_small
           mask = -1e9 * (1 - mask)
-
-          logits += mask
-
+          
+          bias = mask + bias
+        
+        # Clipping
+        bias = tf.maximum(bias, -1e9)
+        
+        logits += bias
         weights = tf.nn.softmax(logits, name="attention_weights")
 
     elif self.mode == "bahdanau":
