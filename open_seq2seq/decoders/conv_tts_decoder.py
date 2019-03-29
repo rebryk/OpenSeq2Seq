@@ -190,7 +190,8 @@ class ConvTTSDecoder(Decoder):
       "window_size": int,
       "back_step_size": int,
       "train_window_size": int,
-      "train_window_speed": float
+      "train_window_speed": float,
+      "post_conv_before_spec": bool
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -208,7 +209,7 @@ class ConvTTSDecoder(Decoder):
     self.attention_pos_encoding = self._params.get("attention_pos_encoding", False)
     self.scale_positional_encoding = self._params.get("scale_positional_encoding", False)
     self.enable_attention = not self._params.get("disable_attention", False)
-    self.post_conv_layers = []
+    self.mel_post_conv_layers = []
     self.stop_token_projection_layer = None
     self.mel_projection_layer = None
 
@@ -279,6 +280,9 @@ class ConvTTSDecoder(Decoder):
       self.attentions.append(attention)
 
     for index, params in enumerate(self._params["post_conv_layers"]):
+      if params["num_channels"] == -1:
+        params["num_channels"] = self.n_mel * self.reduction_factor
+
       layer = ConvBlock.create(
         index=index,
         conv_params=params,
@@ -288,7 +292,7 @@ class ConvTTSDecoder(Decoder):
         cnn_dropout_prob=cnn_dropout_prob,
         training=self.training
       )
-      self.post_conv_layers.append(layer)
+      self.mel_post_conv_layers.append(layer)
 
     # TODO: Do we need to use bias?
     self.mel_projection_layer = tf.layers.Dense(
@@ -387,9 +391,10 @@ class ConvTTSDecoder(Decoder):
       positions = alignment_positions[i, :, :, :] if alignment_positions is not None else None
       y = attention(y, encoder_outputs, enc_dec_attention_bias, positions=positions)
 
-    with tf.variable_scope("post_conv"):
-      for layer in self.post_conv_layers:
-        y = layer(y)
+    if self._params.get("post_conv_before_spec", True):
+      with tf.variable_scope("post_conv"):
+        for layer in self.mel_post_conv_layers:
+          y = layer(y)
 
     with tf.variable_scope("mag_projection"):
       batch_size = tf.shape(y)[0]
@@ -402,6 +407,14 @@ class ConvTTSDecoder(Decoder):
 
     mel_spec = self.mel_projection_layer(y)
     stop_token_logits = self.stop_token_projection_layer(y)
+
+    if not self._params.get("post_conv_before_spec", True):
+      with tf.variable_scope("post_conv"):
+        new_mel_spec = mel_spec
+        for layer in self.mel_post_conv_layers:
+          new_mel_spec = layer(new_mel_spec)
+
+        mel_spec += new_mel_spec
 
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
