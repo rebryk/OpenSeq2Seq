@@ -172,10 +172,9 @@ base_params = {
           "num_channels": decoder_hidden_size,
           "padding": "VALID",
           "is_causal": True,
-          "is_residual": False,
           "activation_fn": tf.nn.relu
         }
-      ] * 2 +
+      ] * 4 +
       [
         {
           "kernel_size": [3],
@@ -183,6 +182,7 @@ base_params = {
           "num_channels": decoder_hidden_size,
           "padding": "SAME",
           "is_causal": False,
+          "is_residual": False,
           "activation_fn": tf.nn.relu
         }
       ] * 2,
