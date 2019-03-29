@@ -184,8 +184,17 @@ base_params = {
           "is_causal": False,
           "is_residual": False,
           "activation_fn": tf.nn.relu
+        },
+        {
+          "kernel_size": [3],
+          "stride": [1],
+          "num_channels": decoder_hidden_size,
+          "padding": "SAME",
+          "is_causal": False,
+          "is_residual": True,
+          "activation_fn": tf.nn.relu
         }
-      ] * 2,
+      ],
     "attention_dropout": 0.1,
     "layer_postprocess_dropout": 0.1
   },
