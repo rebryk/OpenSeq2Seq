@@ -156,11 +156,11 @@ base_params = {
       "is_causal": True,
       "activation_fn": tf.nn.relu
     },
-
-    "window_size": 3,
-    "back_step_size": 0,
-    "train_window_size": 40,
-    "train_window_speed": 0.4,
+     
+    # "window_size": 3,
+    # "back_step_size": 0,
+    # "train_window_size": 40,
+    # "train_window_speed": 0.4,
 
     "hidden_size": decoder_hidden_size,
     "reduction_factor": reduction_factor,
