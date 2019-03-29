@@ -212,7 +212,7 @@ class Attention(tf.layers.Layer):
         
         batch_size = tf.shape(logits)[0]
 
-        if self.train and self.train_window_size > 0.0:
+        if self.train and self.train_window_size:
           decoder_length = tf.shape(logits)[2]
           encoder_length = tf.shape(logits)[3]
           
