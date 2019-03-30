@@ -191,7 +191,8 @@ class ConvTTSDecoder(Decoder):
       "back_step_size": int,
       "train_window_size": int,
       "train_window_speed": float,
-      "post_conv_before_spec": bool
+      "post_conv_before_spec": bool,
+      "mag_post_conv_layers": None
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -210,11 +211,13 @@ class ConvTTSDecoder(Decoder):
     self.scale_positional_encoding = self._params.get("scale_positional_encoding", False)
     self.enable_attention = not self._params.get("disable_attention", False)
     self.mel_post_conv_layers = []
+    self.mag_post_conv_layers = []
     self.stop_token_projection_layer = None
     self.mel_projection_layer = None
+    self.mag_projection_layer = None
 
     self.n_mel = n_feats["mel"] if use_mag else n_feats
-    self.n_mag = n_feats["mag"] if use_mag else None
+    self.n_mag = n_feats["magnitude"] if use_mag else None
     self.reduction_factor = params.get("reduction_factor", 1)
 
   def _build_layers(self):
@@ -303,8 +306,27 @@ class ConvTTSDecoder(Decoder):
     )
 
     if self.n_mag:
-      # TODO: implement mag predeciotn
-      pass
+      for index, params in enumerate(self._params["mag_post_conv_layers"]):
+        if params["num_channels"] == -1:
+          params["num_channels"] = self.n_mag * self.reduction_factor
+
+        layer = ConvBlock.create(
+          index=index,
+          conv_params=params,
+          regularizer=regularizer,
+          bn_momentum=bn_momentum,
+          bn_epsilon=bn_epsilon,
+          cnn_dropout_prob=cnn_dropout_prob,
+          training=self.training
+        )
+        self.mag_post_conv_layers.append(layer)
+
+      self.mag_projection_layer = tf.layers.Dense(
+        name="mag_projection",
+        units=self.n_mag * self.reduction_factor,
+        use_bias=True,
+        kernel_regularizer=regularizer
+      )
 
     # TODO: Do we need to use bias?
     self.stop_token_projection_layer = tf.layers.Dense(
@@ -396,36 +418,44 @@ class ConvTTSDecoder(Decoder):
         for layer in self.mel_post_conv_layers:
           y = layer(y)
 
-    with tf.variable_scope("mag_projection"):
-      batch_size = tf.shape(y)[0]
-
-      if self.n_mag:
-        # TODO: mag spec
-        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
-      else:
-        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
-
     mel_spec = self.mel_projection_layer(y)
     stop_token_logits = self.stop_token_projection_layer(y)
 
-    if not self._params.get("post_conv_before_spec", True):
+    if self._params.get("post_conv_before_spec", True):
+      post_mel_spec = mel_spec
+    else:
       with tf.variable_scope("post_conv"):
-        new_mel_spec = mel_spec
+        post_mel_spec = mel_spec
         for layer in self.mel_post_conv_layers:
-          new_mel_spec = layer(new_mel_spec)
+          post_mel_spec = layer(post_mel_spec)
 
-        mel_spec += new_mel_spec
+        post_mel_spec += mel_spec
+
+    # TODO: simplify
+    batch_size = tf.shape(y)[0]
+    if not self.n_mag:
+      with tf.variable_scope("mag_projection"):
+        post_mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
+    else:
+        mag_spec = self.mag_projection_layer(y)
+
+        with tf.variable_scope("mag_post_conv"):
+            post_mag_spec = mag_spec
+            for layer in self.mag_post_conv_layers:
+              post_mag_spec = layer(post_mag_spec)
+
+            post_mag_spec += mag_spec
 
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
 
     return {
       "spec": mel_spec,
-      "post_net_spec": mel_spec,
+      "post_net_spec": post_mel_spec,
       "alignments": None,
       "stop_token_logits": stop_token_logits,
       "lengths": sequence_lengths,
-      "mag_spec": mag_spec
+      "mag_spec": post_mag_spec
     }
 
   def _train(self, targets, encoder_outputs, enc_dec_attention_bias, sequence_lengths):
@@ -544,7 +574,6 @@ class ConvTTSDecoder(Decoder):
     )
 
     with tf.variable_scope("inference_step"):
-      # We don't have post-net, thus spec = post_net_spec
       next_inputs = outputs["post_net_spec"][:, -1:, :]
 
       # Set zero if sequence is finished
