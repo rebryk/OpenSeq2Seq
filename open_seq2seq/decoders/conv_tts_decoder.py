@@ -413,13 +413,15 @@ class ConvTTSDecoder(Decoder):
       positions = alignment_positions[i, :, :, :] if alignment_positions is not None else None
       y = attention(y, encoder_outputs, enc_dec_attention_bias, positions=positions)
 
+    mel_spec = y
+
     if self._params.get("post_conv_before_spec", True):
       with tf.variable_scope("post_conv"):
         for layer in self.mel_post_conv_layers:
-          y = layer(y)
+          mel_spec = layer(mel_spec)
 
-    mel_spec = self.mel_projection_layer(y)
-    stop_token_logits = self.stop_token_projection_layer(y)
+    stop_token_logits = self.stop_token_projection_layer(mel_spec)
+    mel_spec = self.mel_projection_layer(mel_spec)
 
     if self._params.get("post_conv_before_spec", True):
       post_mel_spec = mel_spec
@@ -429,22 +431,18 @@ class ConvTTSDecoder(Decoder):
         for layer in self.mel_post_conv_layers:
           post_mel_spec = layer(post_mel_spec)
 
-        post_mel_spec += mel_spec
-
     # TODO: simplify
     batch_size = tf.shape(y)[0]
     if not self.n_mag:
       with tf.variable_scope("mag_projection"):
-        post_mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
+        mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
     else:
-        mag_spec = self.mag_projection_layer(y)
-
         with tf.variable_scope("mag_post_conv"):
-            post_mag_spec = mag_spec
+            mag_spec = y
             for layer in self.mag_post_conv_layers:
-              post_mag_spec = layer(post_mag_spec)
+              mag_spec = layer(mag_spec)
 
-            post_mag_spec += mag_spec
+        mag_spec = self.mag_projection_layer(mag_spec)
 
     if sequence_lengths is None:
       sequence_lengths = tf.zeros([batch_size])
@@ -455,7 +453,7 @@ class ConvTTSDecoder(Decoder):
       "alignments": None,
       "stop_token_logits": stop_token_logits,
       "lengths": sequence_lengths,
-      "mag_spec": post_mag_spec
+      "mag_spec": mag_spec
     }
 
   def _train(self, targets, encoder_outputs, enc_dec_attention_bias, sequence_lengths):
