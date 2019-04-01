@@ -192,7 +192,9 @@ class ConvTTSDecoder(Decoder):
       "train_window_size": int,
       "train_window_speed": float,
       "post_conv_before_spec": bool,
-      "mag_post_conv_layers": None
+      "mag_post_conv_layers": None,
+      "scale_input": bool,
+      "scale_input_factor": int
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -202,6 +204,7 @@ class ConvTTSDecoder(Decoder):
     n_feats = data_layer_params["num_audio_features"]
     use_mag = "both" in data_layer_params["output_type"]
 
+    self.step = None
     self.training = mode == "train"
     self.prenet = None
     self.pre_conv_layers = []
@@ -221,6 +224,9 @@ class ConvTTSDecoder(Decoder):
     self.reduction_factor = params.get("reduction_factor", 1)
 
   def _build_layers(self):
+    if self._params.get("scale_input", False):
+      self.step = tf.Variable(0, trainable=False, name='step', dtype=tf.int32)
+
     regularizer = self._params.get("regularizer", None)
 
     # TODO: dropout during inference?
@@ -463,6 +469,15 @@ class ConvTTSDecoder(Decoder):
       targets = self._collapse(targets, self.n_mel, self.reduction_factor)
       decoder_inputs = tf.pad(targets, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
 
+    if self._params.get("scale_input", False):
+      with tf.name_scope("scale_targets"):
+        # Update global step
+        step = tf.assign(self.step, self.step + 1)
+        step = tf.cast(step, dtype=tf.float32) - 1
+        coeff = tf.maximum(1.0 - step / self._params.get("scale_input_factor"), 0.0)
+        coeff *= coeff
+        decoder_inputs = coeff * decoder_inputs
+
     outputs = self._decode_pass(
       decoder_inputs=decoder_inputs,
       encoder_outputs=encoder_outputs,
@@ -563,6 +578,9 @@ class ConvTTSDecoder(Decoder):
     encoder_outputs = state["encoder_outputs"]
     enc_dec_attention_bias = state["encoder_decoder_attention_bias"]
     alignment_positions = state["alignment_positions"]
+
+    if self._params.get("scale_input", False):
+      decoder_inputs = tf.zeros_like(decoder_inputs)
 
     outputs = self._decode_pass(
       decoder_inputs=decoder_inputs,
