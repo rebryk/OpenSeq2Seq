@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import os
 import six
+import torch
 import librosa
 import numpy as np
 import tensorflow as tf
@@ -53,7 +54,8 @@ class Text2SpeechDataLayer(DataLayer):
             'style_input': [None, 'wav'],
             'n_samples_train': int,
             'n_samples_eval': int,
-            'n_fft': int
+            'n_fft': int,
+            'fmax': float
         }
     )
 
@@ -208,7 +210,8 @@ class Text2SpeechDataLayer(DataLayer):
           n_fft=self._n_fft,
           n_mels=n_mels,
           htk=htk,
-          norm=norm
+          norm=norm,
+          fmax=self.params.get('fmax', None)
       )
     else:
       self._mel_basis = None
