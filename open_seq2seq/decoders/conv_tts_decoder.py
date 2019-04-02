@@ -474,8 +474,8 @@ class ConvTTSDecoder(Decoder):
         # Update global step
         step = tf.assign(self.step, self.step + 1)
         step = tf.cast(step, dtype=tf.float32) - 1
-        coeff = tf.maximum(1.0 - step / self._params.get("scale_input_factor"), 0.0)
-        coeff *= coeff
+        step = step // self._params.get("scale_input_factor")
+        coeff = tf.maximum(1.0 - 0.05 * step, 0.0)
         decoder_inputs = coeff * decoder_inputs
 
     outputs = self._decode_pass(
