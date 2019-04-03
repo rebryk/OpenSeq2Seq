@@ -194,7 +194,8 @@ class ConvTTSDecoder(Decoder):
       "post_conv_before_spec": bool,
       "mag_post_conv_layers": None,
       "scale_input": bool,
-      "scale_input_factor": int
+      "scale_input_factor": int,
+      "use_mag_input": bool
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -203,6 +204,8 @@ class ConvTTSDecoder(Decoder):
     data_layer_params = model.get_data_layer().params
     n_feats = data_layer_params["num_audio_features"]
     use_mag = "both" in data_layer_params["output_type"]
+
+    self.use_mag_input = self._params.get("use_mag_input", False)
 
     self.step = None
     self.training = mode == "train"
@@ -465,8 +468,9 @@ class ConvTTSDecoder(Decoder):
   def _train(self, targets, encoder_outputs, enc_dec_attention_bias, sequence_lengths):
     # Shift targets to the right, and remove the last element
     with tf.name_scope("shift_targets"):
-      targets = targets[:, :, :self.n_mel]
-      targets = self._collapse(targets, self.n_mel, self.reduction_factor)
+      n_features = self.n_mel + (self.n_mag if self.use_mag_input else 0)
+      targets = targets[:, :, :n_features]
+      targets = self._collapse(targets, n_features, self.reduction_factor)
       decoder_inputs = tf.pad(targets, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
 
     if self._params.get("scale_input", False):
@@ -527,10 +531,11 @@ class ConvTTSDecoder(Decoder):
       num_mag_features = self.n_mag or batch_size
       n_layers = self._params.get("attention_layers", 1)
       n_heads = self._params.get("attention_heads", 1)
+      n_features = self.n_mel + (self.n_mag if self.use_mag_input else 0)
 
       state = {
         "iteration": tf.constant(0),
-        "inputs": tf.zeros([batch_size, 1, self.n_mel * self.reduction_factor]),
+        "inputs": tf.zeros([batch_size, 1, n_features * self.reduction_factor]),
         "finished": tf.cast(tf.zeros([batch_size]), tf.bool),
         "alignment_positions": tf.zeros([n_layers, batch_size, n_heads, 1], dtype=tf.int32),
         "outputs": {
@@ -549,7 +554,7 @@ class ConvTTSDecoder(Decoder):
 
       state_shape_invariants = {
         "iteration": tf.TensorShape([]),
-        "inputs": tf.TensorShape([None, None, self.n_mel * self.reduction_factor]),
+        "inputs": tf.TensorShape([None, None, n_features * self.reduction_factor]),
         "finished": tf.TensorShape([None]),
         "alignment_positions": tf.TensorShape([n_layers, None, n_heads, None]),
         "outputs": {
@@ -590,7 +595,17 @@ class ConvTTSDecoder(Decoder):
     )
 
     with tf.variable_scope("inference_step"):
-      next_inputs = outputs["post_net_spec"][:, -1:, :]
+      if self.use_mag_input:
+        next_inputs_mel = outputs["post_net_spec"][:, -1:, :]
+        next_inputs_mel = self._extend(next_inputs_mel, self.reduction_factor)
+        next_inputs_mag = outputs["mag_spec"][:, -1:, :]
+        next_inputs_mag = self._extend(next_inputs_mag, self.reduction_factor)
+        next_inputs = tf.concat([next_inputs_mel, next_inputs_mag], axis=-1)
+
+        n_features = self.n_mel + (self.n_mag if self.use_mag_input else 0)
+        next_inputs = self._collapse(next_inputs, n_features, self.reduction_factor)
+      else:
+        next_inputs = outputs["post_net_spec"][:, -1:, :]
 
       # Set zero if sequence is finished
       next_inputs = tf.where(state["finished"], tf.zeros_like(next_inputs), next_inputs)
