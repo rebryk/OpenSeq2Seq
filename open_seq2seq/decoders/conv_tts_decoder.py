@@ -196,7 +196,8 @@ class ConvTTSDecoder(Decoder):
       "scale_input": bool,
       "scale_input_factor": int,
       "use_mag_input": bool,
-      "real_post_conv_layers": None
+      "real_post_conv_layers": None,
+      "mag_from_mel": bool
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -223,6 +224,7 @@ class ConvTTSDecoder(Decoder):
     self.stop_token_projection_layer = None
     self.mel_projection_layer = None
     self.mag_projection_layer = None
+    self.mag_from_mel = self._params.get("mag_from_mel", False)
 
     self.n_mel = n_feats["mel"] if use_mag else n_feats
     self.n_mag = n_feats["magnitude"] if use_mag else None
@@ -472,7 +474,7 @@ class ConvTTSDecoder(Decoder):
         mag_spec = tf.zeros([batch_size, batch_size, batch_size * self.reduction_factor])
     else:
         with tf.variable_scope("mag_post_conv"):
-            mag_spec = y
+            mag_spec = post_mel_spec if self.mag_from_mel else y
             for layer in self.mag_post_conv_layers:
               mag_spec = layer(mag_spec)
 
