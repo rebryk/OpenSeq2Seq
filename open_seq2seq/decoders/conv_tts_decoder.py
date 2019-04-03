@@ -195,7 +195,8 @@ class ConvTTSDecoder(Decoder):
       "mag_post_conv_layers": None,
       "scale_input": bool,
       "scale_input_factor": int,
-      "use_mag_input": bool
+      "use_mag_input": bool,
+      "real_post_conv_layers": None
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -217,6 +218,7 @@ class ConvTTSDecoder(Decoder):
     self.scale_positional_encoding = self._params.get("scale_positional_encoding", False)
     self.enable_attention = not self._params.get("disable_attention", False)
     self.mel_post_conv_layers = []
+    self.mel_real_post_conv_layers = []
     self.mag_post_conv_layers = []
     self.stop_token_projection_layer = None
     self.mel_projection_layer = None
@@ -305,6 +307,22 @@ class ConvTTSDecoder(Decoder):
         training=self.training
       )
       self.mel_post_conv_layers.append(layer)
+
+    if "real_post_conv_layers" in self._params:
+      for index, params in enumerate(self._params["real_post_conv_layers"]):
+        if params["num_channels"] == -1:
+          params["num_channels"] = self.n_mel * self.reduction_factor
+
+        layer = ConvBlock.create(
+          index=index,
+          conv_params=params,
+          regularizer=regularizer,
+          bn_momentum=bn_momentum,
+          bn_epsilon=bn_epsilon,
+          cnn_dropout_prob=cnn_dropout_prob,
+          training=self.training
+        )
+        self.mel_real_post_conv_layers.append(layer)
 
     # TODO: Do we need to use bias?
     self.mel_projection_layer = tf.layers.Dense(
@@ -439,6 +457,13 @@ class ConvTTSDecoder(Decoder):
         post_mel_spec = mel_spec
         for layer in self.mel_post_conv_layers:
           post_mel_spec = layer(post_mel_spec)
+
+    with tf.variable_scope("real_post_conv"):
+      real_post_mel_spec = post_mel_spec
+      for layer in self.mel_real_post_conv_layers:
+        real_post_mel_spec = layer(real_post_mel_spec)
+
+      post_mel_spec += real_post_mel_spec
 
     # TODO: simplify
     batch_size = tf.shape(y)[0]
