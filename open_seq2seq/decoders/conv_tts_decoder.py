@@ -460,12 +460,13 @@ class ConvTTSDecoder(Decoder):
         for layer in self.mel_post_conv_layers:
           post_mel_spec = layer(post_mel_spec)
 
-    with tf.variable_scope("real_post_conv"):
-      real_post_mel_spec = post_mel_spec
-      for layer in self.mel_real_post_conv_layers:
-        real_post_mel_spec = layer(real_post_mel_spec)
+    if "real_post_conv_layers" in self._params:
+      with tf.variable_scope("real_post_conv"):
+        real_post_mel_spec = post_mel_spec
+        for layer in self.mel_real_post_conv_layers:
+          real_post_mel_spec = layer(real_post_mel_spec)
 
-      post_mel_spec += real_post_mel_spec
+        post_mel_spec += real_post_mel_spec
 
     # TODO: simplify
     batch_size = tf.shape(y)[0]
