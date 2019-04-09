@@ -26,8 +26,8 @@ if dataset == "MAILABS":
 elif dataset == "LJ":
   trim = False
   mag_num_feats = 513
-  train = "test.csv"
-  val = "test.csv"
+  train = "train.csv"
+  val = "train.csv"
   batch_size = 32
 else:
   raise ValueError("Unknown dataset")
@@ -120,7 +120,7 @@ base_params = {
     "embedding_size": encoder_hidden_size,
     "output_size": encoder_hidden_size,
     "pad_embeddings_2_eight": True,
-    "cnn_dropout_prob": 0.5,
+    "cnn_dropout_prob": 0.0,
     "conv_layers": [
       {
         "kernel_size": [3], "stride": [1],
@@ -168,7 +168,8 @@ base_params = {
     "prenet_layers": 2,
     "prenet_hidden_size": decoder_hidden_size,
     "prenet_use_inference_dropout": False,
-    "cnn_dropout_prob": 0.5,
+    "cnn_dropout_prob": 0.0,
+    "prenet_dropout": 0.0,
     "pre_conv_layers": [],
     "post_conv_layers":
       [
@@ -192,8 +193,8 @@ base_params = {
           "activation_fn": tf.nn.relu
         }
       ] * 4,
-    "attention_dropout": 0.1,
-    "layer_postprocess_dropout": 0.1
+    "attention_dropout": 0.0,
+    "layer_postprocess_dropout": 0.0
   },
 
   "loss": TransformerTTSLoss,
@@ -205,7 +206,7 @@ base_params = {
   "data_layer": Text2SpeechDataLayer,
   "data_layer_params": {
     "dataset": dataset,
-    # "n_samples_train": 13100,
+    "n_samples_train": 1024,
     "n_samples_eval": 64,
     "num_audio_features": num_audio_features,
     "output_type": output_type,
