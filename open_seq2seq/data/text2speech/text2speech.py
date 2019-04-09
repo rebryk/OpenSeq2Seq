@@ -54,7 +54,8 @@ class Text2SpeechDataLayer(DataLayer):
             'n_samples_train': int,
             'n_samples_eval': int,
             'n_fft': int,
-            'fmax': float
+            'fmax': float,
+            'max_normalization': bool
         }
     )
 
@@ -142,6 +143,8 @@ class Text2SpeechDataLayer(DataLayer):
     self.params['char2idx']['</s>'] = 2
     self.params['idx2char'] = {i: w for w, i in self.params['char2idx'].items()}
     self.params['src_vocab_size'] = len(self.params['char2idx'])
+
+    self.max_normalization = self.params.get('max_normalization', False)
 
     n_feats = self.params['num_audio_features']
     if "both" in self.params["output_type"]:

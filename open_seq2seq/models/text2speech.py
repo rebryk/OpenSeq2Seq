@@ -120,7 +120,8 @@ def save_audio(
     save_format="tensorboard",
     power=1.5,
     gl_iters=50,
-    verbose=True
+    verbose=True,
+    max_normalization=False
 ):
   """
   Helper function to create a wav file to be logged to disk or a tf.Summary to
@@ -150,6 +151,10 @@ def save_audio(
       print("WARNING: {} audio was clipped at step {}".format(mode.capitalize(), step))
     magnitudes = np.clip(magnitudes, a_min=0, a_max=255)
   signal = griffin_lim(magnitudes.T**power, n_iters=gl_iters, n_fft=n_fft)
+
+  if max_normalization:
+    signal /= np.max(np.abs(signal))
+
   if save_format == "np.array":
     return signal
   elif save_format == "tensorboard":
@@ -314,6 +319,7 @@ class Text2Speech(EncoderDecoderModel):
           sampling_rate=self.get_data_layer().sampling_rate,
           mode="train_mag",
           save_format=save_format,
+          max_normalization=self.get_data_layer().max_normalization
       )
       dict_to_log['audio_mag'] = wav_summary
     predicted_final_spec = predicted_final_spec[:audio_length - 1, :]
@@ -324,7 +330,8 @@ class Text2Speech(EncoderDecoderModel):
         step,
         n_fft=self.get_data_layer().n_fft,
         sampling_rate=self.get_data_layer().sampling_rate,
-        save_format=save_format
+        save_format=save_format,
+        max_normalization=self.get_data_layer().max_normalization
     )
     dict_to_log['audio'] = wav_summary
 
@@ -445,6 +452,7 @@ class Text2Speech(EncoderDecoderModel):
             sampling_rate=self.get_data_layer().sampling_rate,
             mode="eval_mag",
             save_format=save_format,
+            max_normalization=self.get_data_layer().max_normalization
         )
         dict_to_log['audio_mag'] = wav_summary
       predicted_final_spec = predicted_final_spec[:audio_length - 1, :]
@@ -456,7 +464,8 @@ class Text2Speech(EncoderDecoderModel):
           n_fft=self.get_data_layer().n_fft,
           sampling_rate=self.get_data_layer().sampling_rate,
           mode="eval",
-          save_format=save_format
+          save_format=save_format,
+          max_normalization=self.get_data_layer().max_normalization
       )
       dict_to_log['audio'] = wav_summary
 
@@ -546,6 +555,7 @@ class Text2Speech(EncoderDecoderModel):
                 mode="infer_mag",
                 number=i * batch_size + j,
                 save_format="disk",
+                max_normalization=self.get_data_layer().max_normalization
             )
           predicted_final_spec = predicted_final_spec[:audio_length - 1, :]
           predicted_final_spec = self.get_data_layer().get_magnitude_spec(predicted_final_spec, is_mel=True)
@@ -557,5 +567,6 @@ class Text2Speech(EncoderDecoderModel):
               sampling_rate=self.get_data_layer().sampling_rate,
               mode="infer",
               number=i * batch_size + j,
-              save_format="disk"
+              save_format="disk",
+              max_normalization=self.get_data_layer().max_normalization
           )
