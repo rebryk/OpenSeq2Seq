@@ -2,7 +2,7 @@
 import os
 
 import tensorflow as tf
-
+import numpy as np
 from open_seq2seq.data import Text2SpeechDataLayer
 from open_seq2seq.decoders import ConvTTSDecoder
 from open_seq2seq.encoders import ConvTTSEncoder
@@ -200,8 +200,8 @@ base_params = {
     "dataset_location": dataset_location,
     "mag_power": 1,
     "pad_EOS": True,
-    "feature_normalize": False,
-    "feature_normalize_mean": 0.,
+    "feature_normalize": True,
+    "feature_normalize_mean": np.log(data_min) / 2,
     "feature_normalize_std": 1.,
     "data_min": data_min,
     "mel_type": "slaney",
