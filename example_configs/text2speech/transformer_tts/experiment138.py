@@ -189,11 +189,22 @@ base_params = {
           "kernel_size": [3],
           "stride": [1],
           "num_channels": decoder_hidden_size,
-          "padding": "VALID",
-          "is_causal": True,
-          "activation_fn": tf.nn.relu
+          "padding": "SAME",
+          "is_causal": False,
+          "is_residual": False,
+          "activation_fn": tf.nn.tanh
         }
-      ] * 4,
+      ] * 3 + [
+        {
+          "kernel_size": [3],
+          "stride": [1],
+          "num_channels": decoder_hidden_size,
+          "padding": "SAME",
+          "is_causal": False,
+          "is_residual": False,
+          "activation_fn": None
+        }
+      ],
     "attention_dropout": 0.0,
     "layer_postprocess_dropout": 0.0
   },
