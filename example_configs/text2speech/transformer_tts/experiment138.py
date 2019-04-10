@@ -164,6 +164,7 @@ base_params = {
     # "window_size": 5,
     # "back_step_size": 0,
 
+    "mag_projection_bias": False,
     "hidden_size": decoder_hidden_size,
     "reduction_factor": reduction_factor,
     "prenet_layers": 2,
@@ -186,23 +187,22 @@ base_params = {
     "mag_post_conv_layers":
       [
         {
-          "kernel_size": [3],
+          "kernel_size": [4],
           "stride": [1],
-          "num_channels": decoder_hidden_size,
+          "num_channels": 256,
           "padding": "SAME",
           "is_causal": False,
           "is_residual": False,
-          "activation_fn": tf.nn.tanh
-        }
-      ] * 3 + [
+          "activation_fn": tf.nn.relu
+        },
         {
-          "kernel_size": [3],
+          "kernel_size": [4],
           "stride": [1],
-          "num_channels": decoder_hidden_size,
+          "num_channels": 512,
           "padding": "SAME",
           "is_causal": False,
           "is_residual": False,
-          "activation_fn": None
+          "activation_fn": tf.nn.relu
         }
       ],
     "attention_dropout": 0.0,
