@@ -197,7 +197,8 @@ class ConvTTSDecoder(Decoder):
       "scale_input_factor": int,
       "use_mag_input": bool,
       "real_post_conv_layers": None,
-      "mag_from_mel": bool
+      "mag_from_mel": bool,
+      "mag_projection_bias": bool
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -353,7 +354,7 @@ class ConvTTSDecoder(Decoder):
       self.mag_projection_layer = tf.layers.Dense(
         name="mag_projection",
         units=self.n_mag * self.reduction_factor,
-        use_bias=True,
+        use_bias=self._params.get("mag_projection_bias", True),
         kernel_regularizer=regularizer
       )
 
