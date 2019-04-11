@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.ops import init_ops
 
 from open_seq2seq.encoders import Encoder
 from open_seq2seq.parts.transformer import embedding_layer
@@ -76,7 +77,8 @@ class ConvBlock:
       name="bn_%d" % index,
       gamma_regularizer=regularizer,
       momentum=bn_momentum,
-      epsilon=bn_epsilon
+      epsilon=bn_epsilon,
+      gamma_initializer=init_ops.zeros_initializer()
     )
 
     dropout = tf.layers.Dropout(
