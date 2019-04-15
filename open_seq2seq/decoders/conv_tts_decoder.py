@@ -198,7 +198,8 @@ class ConvTTSDecoder(Decoder):
       "use_mag_input": bool,
       "real_post_conv_layers": None,
       "mag_from_mel": bool,
-      "mag_projection_bias": bool
+      "mag_projection_bias": bool,
+      "force_layers": list
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -275,6 +276,7 @@ class ConvTTSDecoder(Decoder):
     n_layers = self._params.get("attention_layers", 1)
     n_heads = self._params.get("attention_heads", 1)
     conv_params = self._params.get("self_attention_conv_params", None)
+    force_layers = self._params.get("force_layers", range(n_layers))
 
     for index in range(n_layers):
       attention = AttentionBlock(
@@ -289,7 +291,7 @@ class ConvTTSDecoder(Decoder):
         pos_encoding=self.attention_pos_encoding and self.enable_attention,
         filter_size=self._params.get("filter_size", None),
         n_heads=n_heads,
-        window_size=self._params.get("window_size", None),
+        window_size=self._params.get("window_size", None) if index in force_layers else None,
         back_step_size=self._params.get("back_step_size", None),
         train_window_size=self._params.get("train_window_size", None),
         train_window_speed=self._params.get("train_window_speed", None)
