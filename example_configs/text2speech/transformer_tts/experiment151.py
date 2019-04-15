@@ -27,7 +27,7 @@ elif dataset == "LJ":
   trim = False
   mag_num_feats = 513
   train = "train.csv"
-  val = "train.csv"
+  val = "test.csv"
   batch_size = 32
 else:
   raise ValueError("Unknown dataset")
@@ -76,7 +76,7 @@ base_params = {
   "eval_steps": 5000 if not debug else 50,
   "save_checkpoint_steps": 5000,
   "save_to_tensorboard": True,
-  "logdir": "result/transformer-LJ-float-145",
+  "logdir": "result/transformer-LJ-float-151",
   "max_grad_norm": 1.,
 
   "optimizer": NovoGrad,
