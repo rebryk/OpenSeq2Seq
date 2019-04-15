@@ -30,6 +30,7 @@ class TransformerTTSLoss(Loss):
         "use_mask": bool,
         "scale": float,
         "stop_token_weight": float,
+        "mel_weight": float,
         "mag_weight": float,
         "l1_norm": bool
     }
@@ -156,7 +157,8 @@ class TransformerTTSLoss(Loss):
       stop_token_loss = tf.reduce_mean(stop_token_loss)
 
     stop_token_weight = self.params.get("stop_token_weight", 1.0)
-    loss = decoder_loss + post_net_loss + stop_token_weight * stop_token_loss
+    mel_weight = self.params.get("mel_weight", 1.0)
+    loss = mel_weight * decoder_loss + mel_weight * post_net_loss + stop_token_weight * stop_token_loss
 
     if self._both:
       mag_weight = self.params.get("mag_weight", 1.0)
