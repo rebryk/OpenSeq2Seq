@@ -122,7 +122,7 @@ class AttentionBlock:
       training=training
     )
 
-    self.output_normalization = LayerNormalization(hidden_size)
+    # self.output_normalization = LayerNormalization(hidden_size)
 
   def __call__(self, decoder_inputs, encoder_outputs, attention_bias, positions=None):
     with tf.variable_scope(self.name):
@@ -137,7 +137,8 @@ class AttentionBlock:
       with tf.variable_scope("feed_forward"):
         y = self.feed_forward(y)
 
-      return self.output_normalization(y)
+      return y
+      # return self.output_normalization(y)
 
 
 class ConvTTSDecoder(Decoder):
@@ -298,6 +299,8 @@ class ConvTTSDecoder(Decoder):
       )
       self.attentions.append(attention)
 
+    self.output_normalization = LayerNormalization(self._params["hidden_size"])
+
     for index, params in enumerate(self._params["post_conv_layers"]):
       if params["num_channels"] == -1:
         params["num_channels"] = self.n_mel * self.reduction_factor
@@ -444,6 +447,8 @@ class ConvTTSDecoder(Decoder):
     for i, attention in enumerate(self.attentions):
       positions = alignment_positions[i, :, :, :] if alignment_positions is not None else None
       y = attention(y, encoder_outputs, enc_dec_attention_bias, positions=positions)
+
+    y = self.output_normalization(y)
 
     mel_spec = y
 
