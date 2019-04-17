@@ -27,7 +27,7 @@ elif dataset == "LJ":
   trim = False
   mag_num_feats = 513
   train = "train.csv"
-  val = "train.csv"
+  val = "test.csv"
   batch_size = 32
 else:
   raise ValueError("Unknown dataset")
@@ -64,7 +64,7 @@ decoder_hidden_size = 512
 base_params = {
   "random_seed": 0,
   "use_horovod": True if not debug else False,
-  "max_steps": 1000000,
+  "max_steps": 2000000,
   "bench_start": 0,
 
   "num_gpus": num_gpus,
@@ -160,8 +160,9 @@ base_params = {
     },
     "attention_pos_encoding": False,
 
-    # "window_size": 5,
+    # "window_size": 3,
     # "back_step_size": 0,
+    # "force_layers": [0],
 
     "hidden_size": decoder_hidden_size,
     "filter_size": 4 * decoder_hidden_size,
