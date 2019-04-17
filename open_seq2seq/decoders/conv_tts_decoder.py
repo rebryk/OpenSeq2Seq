@@ -60,6 +60,7 @@ class AttentionBlock:
                back_step_size=None,
                train_window_size=None,
                train_window_speed=None,
+               use_layer_norm=False,
                name="attention_block"):
     self.name = name
 
@@ -122,7 +123,7 @@ class AttentionBlock:
       training=training
     )
 
-    # self.output_normalization = LayerNormalization(hidden_size)
+    self.output_normalization = LayerNormalization(hidden_size) if use_layer_norm else None
 
   def __call__(self, decoder_inputs, encoder_outputs, attention_bias, positions=None):
     with tf.variable_scope(self.name):
@@ -137,8 +138,7 @@ class AttentionBlock:
       with tf.variable_scope("feed_forward"):
         y = self.feed_forward(y)
 
-      return y
-      # return self.output_normalization(y)
+      return self.output_normalization(y) if self.output_normalization else y
 
 
 class ConvTTSDecoder(Decoder):
@@ -202,7 +202,8 @@ class ConvTTSDecoder(Decoder):
       "mag_projection_bias": bool,
       "force_layers": list,
       "use_mel": bool,
-      "real_mag_post_conv_layers": None
+      "real_mag_post_conv_layers": None,
+      "use_layer_norm": bool
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -299,11 +300,15 @@ class ConvTTSDecoder(Decoder):
         window_size=self._params.get("window_size", None) if index in force_layers else None,
         back_step_size=self._params.get("back_step_size", None),
         train_window_size=self._params.get("train_window_size", None),
-        train_window_speed=self._params.get("train_window_speed", None)
+        train_window_speed=self._params.get("train_window_speed", None),
+        use_layer_norm=self._params.get("use_layer_norm", False)
       )
       self.attentions.append(attention)
 
-    self.output_normalization = LayerNormalization(self._params["hidden_size"])
+    if self._params.get("use_layer_norm", False):
+        self.output_normalization = None
+    else:
+        self.output_normalization = LayerNormalization(self._params["hidden_size"])
 
     for index, params in enumerate(self._params["post_conv_layers"]):
       if params["num_channels"] == -1:
@@ -465,7 +470,8 @@ class ConvTTSDecoder(Decoder):
       positions = alignment_positions[i, :, :, :] if alignment_positions is not None else None
       y = attention(y, encoder_outputs, enc_dec_attention_bias, positions=positions)
 
-    y = self.output_normalization(y)
+    if self.output_normalization is not None:
+        y = self.output_normalization(y)
 
     mel_spec = y
 
