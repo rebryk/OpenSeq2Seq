@@ -200,7 +200,8 @@ class ConvTTSDecoder(Decoder):
       "real_post_conv_layers": None,
       "mag_from_mel": bool,
       "mag_projection_bias": bool,
-      "force_layers": list
+      "force_layers": list,
+      "use_mel": bool
     })
 
   def __init__(self, params, model, name="conv_tts_decoder", mode="train"):
@@ -228,6 +229,7 @@ class ConvTTSDecoder(Decoder):
     self.mel_projection_layer = None
     self.mag_projection_layer = None
     self.mag_from_mel = self._params.get("mag_from_mel", False)
+    self.use_mel = self._params.get("use_mel", True)
 
     self.n_mel = n_feats["mel"] if use_mag else n_feats
     self.n_mag = n_feats["magnitude"] if use_mag else None
@@ -398,12 +400,9 @@ class ConvTTSDecoder(Decoder):
                    enc_dec_attention_bias,
                    sequence_lengths=None,
                    alignment_positions=None):
-    # TODO: simplify
-    # shape = tf.shape(decoder_inputs)
-    # decoder_inputs = tf.Print(decoder_inputs, [tf.shape(decoder_inputs)], summarize=10)
-    # y = tf.reshape(decoder_inputs, [shape[0], shape[1] * self.reduction_factor, self.n_mel])
-    # y = self.prenet(y)
-    # y = self._collapse(y, self.n_mel, self.reduction_factor)
+    if not self.use_mel:
+      decoder_inputs = decoder_inputs[:, :, self.n_mel:]
+
     y = self.prenet(decoder_inputs)
 
     with tf.variable_scope("pre_conv"):
