@@ -44,7 +44,8 @@ class CentaurDecoder(Decoder):
         "attention_cnn_dropout_prob": float,
         "window_size": int,
         "back_step_size": int,
-        "force_layers": list
+        "force_layers": list,
+        "mag_cnn_dropout_prob": float
     })
 
   def __init__(self, params, model, name="centaur_decoder", mode="train"):
@@ -136,6 +137,7 @@ class CentaurDecoder(Decoder):
     )
 
     cnn_dropout_prob = self._params.get("cnn_dropout_prob", 0.5)
+    mag_cnn_dropout_prob = self._params.get("mag_cnn_dropout_prob", 0.1)
     bn_momentum = self._params.get("bn_momentum", 0.95)
     bn_epsilon = self._params.get("bn_epsilon", -1e8)
 
@@ -200,7 +202,7 @@ class CentaurDecoder(Decoder):
           regularizer=regularizer,
           bn_momentum=bn_momentum,
           bn_epsilon=bn_epsilon,
-          cnn_dropout_prob=cnn_dropout_prob,
+          cnn_dropout_prob=mag_cnn_dropout_prob,
           training=self.training
       )
       self.mag_conv_layers.append(layer)
