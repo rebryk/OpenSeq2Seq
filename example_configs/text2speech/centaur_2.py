@@ -56,7 +56,7 @@ base_params = {
   "eval_steps": 10000 if not debug else 50,
   "save_checkpoint_steps": 10000,
   "save_to_tensorboard": True,
-  "logdir": "result/centaur_1",
+  "logdir": "result/centaur_2",
   "max_grad_norm": 1.,
 
   "optimizer": NovoGrad,
