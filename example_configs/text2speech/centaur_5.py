@@ -67,8 +67,14 @@ base_params = {
   #   "weight_decay": 0.001,
   #
   # },
+  
   "optimizer": "Adam",
   "optimizer_params": {},
+  "regularizer": tf.contrib.layers.l2_regularizer,
+  "regularizer_params": {
+    'scale': 1e-4
+  },
+  
   "lr_policy": poly_decay,
   "lr_policy_params": {
     "learning_rate": 0.02,
