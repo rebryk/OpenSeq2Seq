@@ -45,7 +45,8 @@ class CentaurDecoder(Decoder):
         "window_size": int,
         "back_step_size": int,
         "force_layers": list,
-        "mag_cnn_dropout_prob": float
+        "mag_cnn_dropout_prob": float,
+        "use_filter": bool
     })
 
   def __init__(self, params, model, name="centaur_decoder", mode="train"):
@@ -171,7 +172,8 @@ class CentaurDecoder(Decoder):
           conv_params=conv_params,
           n_heads=n_heads,
           window_size=window_size,
-          back_step_size=self._params.get("back_step_size", None)
+          back_step_size=self._params.get("back_step_size", None),
+          use_filter=self._params.get("use_filter", True)
       )
       self.attentions.append(attention)
 
