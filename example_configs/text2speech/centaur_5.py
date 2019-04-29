@@ -8,8 +8,7 @@ from open_seq2seq.decoders import CentaurDecoder
 from open_seq2seq.encoders import CentaurEncoder
 from open_seq2seq.losses import Text2SpeechLoss
 from open_seq2seq.models import Text2SpeechCentaur
-from open_seq2seq.optimizers.lr_policies import poly_decay
-from open_seq2seq.optimizers.novograd import NovoGrad
+from open_seq2seq.optimizers.lr_policies import exp_decay
 
 base_model = Text2SpeechCentaur
 
@@ -59,28 +58,22 @@ base_params = {
   "logdir": "result/centaur_5",
   "max_grad_norm": 1.,
 
-  # "optimizer": NovoGrad,
-  # "optimizer_params": {
-  #   "beta1": 0.95,
-  #   "beta2": 0.98,
-  #   "epsilon": 1e-08,
-  #   "weight_decay": 0.001,
-  #
-  # },
-  
   "optimizer": "Adam",
   "optimizer_params": {},
-  "regularizer": tf.contrib.layers.l2_regularizer,
-  "regularizer_params": {
-    'scale': 1e-4
-  },
-  
-  "lr_policy": poly_decay,
+  "lr_policy": exp_decay,
   "lr_policy_params": {
-    "learning_rate": 0.02,
-    "power": 2.0,
+    "learning_rate": 1e-3,
+    "decay_steps": 20000,
+    "decay_rate": 0.1,
+    "use_staircase_decay": False,
+    "begin_decay_at": 45000,
+    "min_lr": 1e-5,
   },
   "dtype": tf.float32,
+  "regularizer": tf.contrib.layers.l2_regularizer,
+  "regularizer_params": {
+    "scale": 1e-6
+  },
   "initializer": tf.contrib.layers.xavier_initializer,
 
   "summaries": ["learning_rate", "variables", "gradients", "larc_summaries",
@@ -139,7 +132,6 @@ base_params = {
     "prenet_hidden_size": decoder_hidden_size,
     "prenet_use_inference_dropout": False,
     "cnn_dropout_prob": 0.1,
-    "mag_cnn_dropout_prob": 0.0,
     "prenet_dropout": 0.5,
     "conv_layers":
       [
