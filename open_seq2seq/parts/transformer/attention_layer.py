@@ -202,8 +202,52 @@ class Attention(tf.layers.Layer):
       if dtype != tf.float32:
         # upcast softmax inputs
         logits = tf.cast(x=logits, dtype=tf.float32)
+        bias = tf.cast(x=bias, dtype=tf.float32)
+
+        batch_size = tf.shape(logits)[0]
+
+        if self.train and self.train_window_size:
+          decoder_length = tf.shape(logits)[2]
+          encoder_length = tf.shape(logits)[3]
+
+          window_pos = self.train_window_speed * (tf.cumsum(tf.ones(decoder_length, dtype=tf.float32)) - 1)
+          window_pos = tf.cast(window_pos, dtype=tf.int32)
+
+          mask_large = tf.sequence_mask(window_pos + self.train_window_size, maxlen=encoder_length)
+          mask_large = tf.cast(mask_large, tf.float32)
+
+          mask_small = tf.sequence_mask(tf.maximum(window_pos - self.train_window_size, 0), maxlen=encoder_length)
+          mask_small = tf.cast(mask_small, tf.float32)
+
+          mask = mask_large - mask_small
+          mask = -1e9 * (1 - mask)
+          mask = tf.reshape(mask, [1, 1, decoder_length, encoder_length])
+          mask = tf.tile(mask, [batch_size, 1, 1, 1])
+
+          bias = mask + bias
+
+        # Shape: [batch, head, decoder]
+        if positions is not None and self.window_size is not None:
+          assert self.back_step_size is not None
+
+          max_length = tf.shape(logits)[-1]
+
+          # Allow to make back_step_size steps back
+          window_pos = tf.maximum(positions - self.back_step_size, tf.zeros_like(positions))
+
+          # Create attention mask
+          mask_large = tf.sequence_mask(window_pos + self.window_size, maxlen=max_length)
+          mask_large = tf.cast(mask_large, tf.float32)
+          mask_small = tf.sequence_mask(window_pos, maxlen=max_length)
+          mask_small = tf.cast(mask_small, tf.float32)
+          mask = mask_large - mask_small
+          mask = -1e9 * (1 - mask)
+
+          bias = mask + bias
+
         logits += bias
         weights = tf.nn.softmax(logits, name="attention_weights")
+
         # downcast softmax output
         weights = tf.cast(weights, dtype=dtype)
       else:
